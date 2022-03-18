@@ -1,0 +1,79 @@
+<Configuration><ViewDefinitions>
+    <View><Name>MatchInfo</Name>
+        <ViewSelectedBy><TypeName>Microsoft.PowerShell.Commands.MatchInfo</TypeName></ViewSelectedBy>
+        <CustomControl><CustomEntries><CustomEntry><CustomItem><ExpressionBinding><ScriptBlock>
+
+            #defaults are equivalent to $MatchInfoPreference =@{$Prefix='> '; $MatchVTSeq=$PSStyle.Reverse; $PathVTSeq=''; $NumberVTSeq=''; $ContextVTSeq=''}
+            $ResetVTSeq = $PSStyle.Reset
+            $Prefix  = '> '
+
+            if (-not $MatchInfoPreference) {
+                $MatchVTSeq =   $PSStyle.Reverse 
+            } else {
+                $MatchVTSeq = $MatchInfoPreference.MatchVTSeq
+                if ($MatchInfoPreference.Prefix) {
+                    $Prefix = $MatchInfoPreference.Prefix
+                }
+            }
+            #if text was piped in filename and path will both be "inputsteam" otherwise the filename will be part of the path.
+            if ($_.Path -eq $_.filename) {
+                $displayPath = '' 
+            }
+            elseif (-not $MatchInfoPreference.PathVTSeq) {
+                $displayPath = $_.RelativePath($Pwd) + ":" 
+            } else {
+                $displayPath = $MatchInfoPreference.PathVTSeq + $_.RelativePath($Pwd) + $ResetVTSeq + ":" 
+            }
+
+            $contextParams  =  @{'Prefix' = " " * $Prefix.length}
+
+            if ($MatchInfoPreference.ContextVTSeq) {
+                $ContextVTSeq = $MatchInfoPreference.ContextVTSeq
+                $contextParams['Suffix'] = $ResetVTSeq
+            }
+
+            function formatLine {
+                param ($Line, $Number, $Prefix, $Suffix)
+                if ($MatchInfoPreference.NumberVTSeq) {
+                    $Number = $MatchInfoPreference.NumberVTSeq + $Number + $ResetVTSeq
+                }
+
+                "{0}{1}{2}: {3}{4}" -f $Prefix, $displayPath, $Number, $Line, $Suffix
+            }
+
+            #highlight the matches unless MatchVTSeq is null or an empty string.
+            if ([string]::IsNullOrEmpty($MatchVTSeq)) {
+                $l = $_.line
+            } else {
+                $lineIndex = 0;
+                $l         = ""
+                foreach ($match in $_.matches) {
+                    $l +=   $_.line.Substring($lineIndex,  ($match.index-$lineIndex)) + $MatchVTSeq  + $_.line.Substring($match.index, $match.length) + $ResetVTSeq
+                    $lineIndex = $match.index + $match.length
+                }
+
+                $l += $_.line.Substring($lineIndex)
+            }
+
+            # Just return a single line if the user didn't  enable context-tracking.
+            if (-not $_.Context) {formatLine -line $l -Number $_.LineNumber }
+
+            #Otherwise, render the full context.
+            else {
+                $lines = @()
+                $number = $_.LineNumber - $_.Context.DisplayPreContext.Length;
+                $_.Context.DisplayPreContext.foreach({
+                    $lines += FormatLine -Line ($ContextVTSeq +$_) -Number ($number ++)  @contextParams
+                })
+
+                $lines     += FormatLine -Line $l -Number ($number ++) -Prefix $Prefix
+
+                $_.Context.DisplayPostContext.foreach({
+                    $lines += FormatLine -Line ($ContextVTSeq + $_) -Number ($number ++) @contextParams
+                })
+
+                $lines -join [System.Environment]::NewLine
+            }
+       </ScriptBlock></ExpressionBinding></CustomItem></CustomEntry></CustomEntries></CustomControl>
+    </View>
+</ViewDefinitions></Configuration>
