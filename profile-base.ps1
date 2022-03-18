@@ -1,5 +1,4 @@
 #profile specific 
-$global:myprofile = "$psscriptroot\base-profile.ps1"
 $env:PSModulePath = "$psscriptroot\modules:$($env:PSModulePath)"
 
 if (get-psdrive 'ProfileHome' -ea 0) {
