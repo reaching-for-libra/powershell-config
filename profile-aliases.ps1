@@ -1,6 +1,5 @@
 
-#clean up aliases that may not be set based on platform
-$cmdletAliases = @{
+$aliases = @{
     cat = 'get-content'
     grep = 'select-string'
     ls = 'get-childitem'
@@ -8,11 +7,15 @@ $cmdletAliases = @{
     rm = 'remove-item'
     rmdir = 'remove-item'
     sort = 'sort-object'
+    s = 'select-object'
+    join = 'join-string'
+    cred = 'get-credential'
 }
 
-foreach ($key in $cmdletaliases.keys){
+foreach ($key in $aliases.keys){
     if (test-path "alias:$key"){
         remove-item "alias:$key" -confirm:$false -force
     }
-    new-alias -name $key -value $cmdletAliases[$key] -confirm:$false
+    new-alias -name $key -value $aliases[$key] -confirm:$false
 }
+
