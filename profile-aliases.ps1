@@ -13,7 +13,7 @@ $aliases = @{
     which = 'get-command'
 
     #custom functions
-    split = 'profile-module\split-string'
+    split = profile-module\split-string
 
     #queryhub
     OAdd = queryhub\Add-OracleQueryHubConnection
@@ -75,6 +75,10 @@ $aliases = @{
 foreach ($key in $aliases.keys){
     if (test-path "alias:$key"){
         remove-item "alias:$key" -confirm:$false -force
+    }
+    if (-not (get-command $aliases[$key]){
+        write-warning "alias '$key' skipped because command '$($aliases[$key])' doesn't exist"
+        continue
     }
     new-alias -name $key -value $aliases[$key] -confirm:$false
 }
