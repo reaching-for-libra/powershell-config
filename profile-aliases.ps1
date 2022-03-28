@@ -83,18 +83,19 @@ if ((get-module queryhub)){
         sfile = queryhub\Invoke-sqlserverQueryFromFile
         ss = queryhub\invoke-sqlserverscript
         sslist = queryhub\get-sqlserverscripts
-
-        foreach ($key in $aliases.keys){
-            if (test-path "alias:$key"){
-                remove-item "alias:$key" -confirm:$false -force
-            }
-            if (-not (get-command $aliases[$key])){
-                write-warning "alias '$key' skipped because command '$($aliases[$key])' doesn't exist"
-                continue
-            }
-            new-alias -name $key -value $aliases[$key] -confirm:$false
-        }
     }
+
+    foreach ($key in $aliases.keys){
+        if (test-path "alias:$key"){
+            remove-item "alias:$key" -confirm:$false -force
+        }
+        if (-not (get-command $aliases[$key])){
+            write-warning "alias '$key' skipped because command '$($aliases[$key])' doesn't exist"
+            continue
+        }
+        new-alias -name $key -value $aliases[$key] -confirm:$false
+    }
+}
 
 #automatic variables
 
