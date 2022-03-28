@@ -73,7 +73,7 @@ $aliases = @{
 
 
 foreach ($key in $aliases.keys){
-    if (test-path "alias:$key"){
+    if (test-path "alias:$key")){
         remove-item "alias:$key" -confirm:$false -force
     }
     if (-not (get-command $aliases[$key]){
