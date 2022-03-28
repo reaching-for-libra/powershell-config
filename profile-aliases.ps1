@@ -13,7 +13,7 @@ $aliases = @{
     which = 'get-command'
 
     #custom functions
-    split = profile-module\split-string
+    split = 'profile-module\split-string'
 
     #queryhub
     OAdd = queryhub\Add-OracleQueryHubConnection
