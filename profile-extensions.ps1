@@ -1,13 +1,13 @@
 
 
-update-typedata -typename 'System.Object' -membertype scriptmethod -membername ToJson -value {
+update-typedata -typename 'System.Object' -membertype scriptmethod -membername ToJsonString -value {
     param(
         [int]$Depth = 10,
         [switch]$Compress)
     $this | convertto-json -depth $depth -compress:$compress
 } -force -confirm:$false 
 
-update-typedata -typename 'System.Management.Automation.PSCustomObject' -membertype scriptmethod -membername ToJson -value {
+update-typedata -typename 'System.Management.Automation.PSCustomObject' -membertype scriptmethod -membername ToJsonString -value {
     param(
         [int]$Depth = 10,
         [switch]$Compress)
@@ -43,11 +43,11 @@ update-typedata -typename 'System.Management.Automation.PSCustomObject' -membert
     write-output $copy
 } -force -confirm:$false 
 
-update-typedata -typename 'string' -membertype scriptmethod -membername FromJson -value {
+update-typedata -typename 'string' -membertype scriptmethod -membername FromJsonString -value {
     $this | convertfrom-json
 } -force -confirm:$false 
 
 update-typedata -typename 'array' -membertype scriptmethod -membername ToJson -value {param([int]$Depth=3,[switch]$Compress)$this|convertto-json -depth $depth -compress:$compress} -force -confirm:$false 
 
-update-typedata -typename 'string' -membertype scriptmethod -membername ToXml -value {[xml]$this} -force -confirm:$false 
-update-typedata -typename 'array' -membertype scriptmethod -membername ToXml -value {[xml]($this -join '')} -force -confirm:$false 
+update-typedata -typename 'string' -membertype scriptmethod -membername FromXmlString -value {[xml]$this} -force -confirm:$false 
+update-typedata -typename 'array' -membertype scriptmethod -membername FromXmlString -value {[xml]($this -join '')} -force -confirm:$false 
