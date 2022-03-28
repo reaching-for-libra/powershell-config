@@ -73,10 +73,10 @@ $aliases = @{
 
 
 foreach ($key in $aliases.keys){
-    if (test-path "alias:$key")){
+    if (test-path "alias:$key"){
         remove-item "alias:$key" -confirm:$false -force
     }
-    if (-not (get-command $aliases[$key]){
+    if (-not (get-command $aliases[$key])){
         write-warning "alias '$key' skipped because command '$($aliases[$key])' doesn't exist"
         continue
     }
