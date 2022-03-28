@@ -26,7 +26,7 @@ if ($psversiontable.platform -eq 'unix'){
 }
 
 #module imports
-
+import-module profilehome:\profile-module.psm1
 
 #default parameters
 $PSDefaultParameterValues.("Format-Table:Autosize") = $true
