@@ -43,11 +43,37 @@ update-typedata -typename 'System.Management.Automation.PSCustomObject' -membert
     write-output $copy
 } -force -confirm:$false 
 
+update-typedata -typename 'string' -membertype scriptmethod -membername ToDateTimeLocal -value {
+    $datetime = [datetime]$this
+
+    if ($datetime.Value.Kind -eq [DateTimeKind]::Utc){
+        $datetimeutc = $datetime
+    }else{
+        $datetimeutc = $datetime.ToUniversalTime()
+    }
+
+    write-output $datetimeutc.tolocaltime()
+
+} -force -confirm:$false 
+update-typedata -typename 'string' -membertype scriptmethod -membername ToDateTimeUtc -value {
+    $datetime = [datetime]$this
+
+    if ($datetime.Value.Kind -eq [DateTimeKind]::Utc){
+        $datetimeutc = $datetime
+    }else{
+        $datetimeutc = $datetime.ToUniversalTime()
+    }
+
+    write-output $datetimeutc
+
+} -force -confirm:$false 
+
+
 update-typedata -typename 'string' -membertype scriptmethod -membername FromJsonString -value {
     $this | convertfrom-json
 } -force -confirm:$false 
 
-update-typedata -typename 'array' -membertype scriptmethod -membername ToJson -value {param([int]$Depth=3,[switch]$Compress)$this|convertto-json -depth $depth -compress:$compress} -force -confirm:$false 
-
 update-typedata -typename 'string' -membertype scriptmethod -membername FromXmlString -value {[xml]$this} -force -confirm:$false 
+
+update-typedata -typename 'array' -membertype scriptmethod -membername ToJson -value {param([int]$Depth=3,[switch]$Compress)$this|convertto-json -depth $depth -compress:$compress} -force -confirm:$false 
 update-typedata -typename 'array' -membertype scriptmethod -membername FromXmlString -value {[xml]($this -join '')} -force -confirm:$false 
