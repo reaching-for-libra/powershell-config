@@ -84,7 +84,6 @@ foreach ($key in $aliases.keys){
 }
 
 #automatic variables
-
 if (-not ("NZ.PSScriptVariable" -as [type])) {
     Add-Type @"
     using System;
@@ -141,3 +140,5 @@ if(Test-Path variable:\slast) {
 }
 $executioncontext.SessionState.PSVariable.Set([NZ.PSScriptVariable]::new('SLast',{@(get-lastsqlserverqueryresult)},$null))
 
+#type accelerators
+[psobject].assembly.gettype("System.Management.Automation.TypeAccelerators")::add("a","System.Management.Automation.PSObject")
