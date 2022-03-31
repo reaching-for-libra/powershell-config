@@ -1,11 +1,11 @@
 #profile specific 
 #$env:PSModulePath = "$psscriptroot\modules:$($env:PSModulePath)"
-$global:myprofile = $MyInvocation.MyCommand.Path
+# $global:myprofile = $MyInvocation.MyCommand.Path
 
 if (get-psdrive 'ProfileHome' -ea 0) {
     remove-psdrive 'ProfileHome' -force -confirm:$false
 }
-new-psdrive -name 'ProfileHome' -psprovider filesystem -root $psscriptroot -confirm:$false -scope global -erroraction stop
+new-psdrive -name 'ProfileHome' -psprovider filesystem -root "$psscriptroot\.." -confirm:$false -scope global -erroraction stop
 
 if (get-childitem function:'ProfileHome:' -ea 0) {
     remove-item function:'profilehome:' -force -confirm:$false
