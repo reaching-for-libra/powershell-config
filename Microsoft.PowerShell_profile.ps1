@@ -1,5 +1,6 @@
 #profile specific 
-$env:PSModulePath = "$psscriptroot\modules:$($env:PSModulePath)"
+#$env:PSModulePath = "$psscriptroot\modules:$($env:PSModulePath)"
+$global:myprofile = $MyInvocation.MyCommand.Path
 
 if (get-psdrive 'ProfileHome' -ea 0) {
     remove-psdrive 'ProfileHome' -force -confirm:$false
