@@ -1972,30 +1972,38 @@ function get-responsevariablescope{
     param(
     )
 
-    $psstacktrace = get-pscallstack
-#    foreach($a in $psstacktrace){
-#        write-host ($psstacktrace |select *| fl|out-string)
+#    $psstacktrace = get-pscallstack
+##    foreach($a in $psstacktrace){
+##        write-host ($psstacktrace |select *| fl|out-string)
+##    }
+##    write-host $myinvocation.scriptname
+##    write-host $PSCommandPath
+#
+#    $leaf = split-path $pscommandpath -leaf
+#
+#    $lastlocation = $null
+#    $scope = 0
+#
+#    foreach($level in $psstacktrace){
+#        if ($level.scriptname -eq $pscommandpath){
+#            continue
+#        }
+#
+#        $location = $level.location -replace ':.*$'
+#        if ($location -ne $lastlocation){
+#            $scope++
+#        }
+#        $lastlocation = $location
 #    }
-#    write-host $myinvocation.scriptname
-#    write-host $PSCommandPath
+#
+#    write-output ($scope - 1)
 
+    $psstacktrace = get-pscallstack
     $leaf = split-path $pscommandpath -leaf
 
-    $lastlocation = $null
-    $scope = 0
-
-    foreach($level in $psstacktrace){
-        if ($level.scriptname -eq $pscommandpath){
-            continue
-        }
-
-        $location = $level.location -replace ':.*$'
-        if ($location -ne $lastlocation){
-            $scope++
-        }
-        $lastlocation = $location
+    if ($psstacktrace.count -gt 2 -and $psstacktrace[2].location -and $psstacktrace[2].location.startswith("${leaf}:")){
+        write-output 1
+    }else{
+        write-output 2
     }
-
-    write-output ($scope - 1)
 }
-
