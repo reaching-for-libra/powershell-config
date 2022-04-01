@@ -1966,3 +1966,36 @@ function codegrep {
     end{
     }
 }
+
+function get-responsevariablescope{
+    [CmdletBinding()] 
+    param(
+    )
+
+    $psstacktrace = get-pscallstack
+#    foreach($a in $psstacktrace){
+#        write-host ($psstacktrace |select *| fl|out-string)
+#    }
+#    write-host $myinvocation.scriptname
+#    write-host $PSCommandPath
+
+    $leaf = split-path $pscommandpath -leaf
+
+    $lastlocation = $null
+    $scope = 0
+
+    foreach($level in $psstacktrace){
+        if ($level.scriptname -eq $pscommandpath){
+            continue
+        }
+
+        $location = $level.location -replace ':.*$'
+        if ($location -ne $lastlocation){
+            $scope++
+        }
+        $lastlocation = $location
+    }
+
+    write-output ($scope - 1)
+}
+
