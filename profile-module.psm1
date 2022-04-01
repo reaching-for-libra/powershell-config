@@ -945,3 +945,1024 @@ function Stop-TcpConnection {
     }
 
 }
+
+function get-function{
+    param(
+        [string]$Name,
+        [string]$Path,
+        [string]$definition,
+        [switch]$HideDefinition
+    )
+
+    $a = get-command $name -erroraction ignore
+    if (-not $a){
+        if ($path){
+            write-host ""
+            write-host "$path -> $definition" -fore blue
+            write-host ""
+        }
+        return
+    }
+
+    
+    if ($a.modulename){
+        $module = "$($a.modulename)\"
+    }
+
+    if ($path){
+        $path = "$path ->"
+    }
+
+    $path = "$path $($a.name)".trim()
+
+    if ($a.commandtype -eq 'function'){
+        write-host ""
+        write-host "$path -> $module$($a.name)" -fore blue
+        write-host ""
+        if (-not $hidedefinition){
+            $a.definition
+        }
+        return 
+    }elseif ($a.commandtype -eq 'cmdlet'){
+        write-host ""
+        write-host "$path -> $module$($a.name)" -fore blue
+        write-host ""
+        return 
+    }
+    if ($a.commandtype -eq 'alias'){
+        get-function $a.ReferencedCommand $path $a.definition -hidedefinition:$hidedefinition
+    }
+}
+
+function Get-GrepMatchValues{
+    param(
+        [parameter(mandatory=$true,ValueFromPipeline=$true)] $Input
+    )
+
+    begin{
+    }
+    process{
+        foreach ($match in $input.matches){
+            $match.value 
+        }
+    }
+    end{
+    }
+}
+
+function Format-HexBytes{
+    param(
+        [parameter(mandatory=$true,ValueFromPipeline=$true)][byte[]]$Bytes,
+        [ValidateSet("Ascii", "UTF32", "UTF7", "UTF8", "BigEndianUnicode", "Unicode")][string] $Encoding = "Ascii"
+    )
+
+    begin{
+        $chars = @()
+    }
+
+    process{
+
+        switch ($encoding){
+            "Ascii"{
+                $chars += [system.text.encoding]::Ascii.getchars($bytes)
+            }"UTF32"{
+                $chars += [system.text.encoding]::UTF32.getchars($bytes)
+            }"UTF7"{
+                $chars += [system.text.encoding]::UTF7.getchars($bytes)
+            }"UTF8"{
+                $chars += [system.text.encoding]::UTF8.getchars($bytes)
+            }"BigEndianUnicode"{
+                $chars += [system.text.encoding]::BigEndianUnicode.getchars($bytes)
+            }"Unicode"{
+                $chars += [system.text.encoding]::Unicode.getchars($bytes)
+            }
+        }
+    }
+
+    end{
+        $string = $chars -join ""
+
+        $string | format-hex -encoding $encoding
+    }
+    
+}
+
+
+function Test-Xml{
+    <#
+    .SYNOPSIS
+    Test the validity of an XML file
+    #>
+    [CmdletBinding(DefaultParameterSetName="String")]
+    param (
+        [parameter(parametersetname="String",position=0,mandatory=$true,valuefrompipeline=$true)][ValidateNotNullorEmpty()]$String,
+        [parameter(parametersetname="File",position=1,mandatory=$true,valuefrompipeline=$true)][ValidateNotNullorEmpty()]$File,
+        [parameter(parametersetname="File",position=0,mandatory=$false)][switch]$FileInput
+    )
+
+    begin{
+    }
+
+    process{
+
+        $result = $true
+        $message = $null
+        $name = $null
+
+        $xml = New-Object System.Xml.XmlDocument
+
+        if ($string -is [system.io.fileinfo]){
+            $file = $string
+            $string = $null
+        }
+
+        if ($string){
+            $contents = $string
+            try {
+                $xml.LoadXml($string)
+            }
+            catch [System.Xml.XmlException] {
+                $message = $_.toString()
+                $result = $false
+            }
+        }else{
+            if (-not ($file -is [system.io.fileinfo])){
+                $file = get-childitem $file -erroraction silentlycontinue
+                if (-not $file){
+                    throw "File not found."
+                }
+            }
+
+            $name = $file.name
+            $contents = cat $file -raw
+
+            try {
+                $xml.Load((convert-path $file))
+            }
+            catch [System.Xml.XmlException] {
+                $message = $_.toString()
+                $result = $false
+            }
+        }
+
+        [PSCustomObject]@{
+            FileName = $name
+            IsValid = $result
+            Message = $message
+            Data = $contents
+        }
+    }
+    end{
+    }
+}
+
+function Convert-NumberStringToSum{
+    param(
+        [parameter(valuefrompipeline=$true)]$NumberString
+    )
+
+    $NumberString -split "`n" | % {$_.trim() -split '\s{1,}'} |  measure -sum | select -expand sum
+}
+
+
+
+function salias{
+    param(
+        [parameter(mandatory=$true)] $Name,
+        [parameter(mandatory=$true)] [scriptblock]$Value 
+    )
+
+    @{
+        name = $name
+        ex = $value
+    }
+}
+
+function gdif{
+
+
+    param(
+        #empty - all params in $args array will be expected to be files
+        [switch]$RawInput,
+        [switch]$FlOss,
+        [switch]$CsvOss,
+        [switch]$Format,
+        [switch]$Verbose
+    )
+
+    if ($verbose){
+        $verbosepreference = 'Continue'
+    }
+
+    $files = @()
+
+    remove-item "$([system.io.path]::gettemppath())*__gdif__" -confirm:$false
+    
+    $params = $args
+    if ($args.count -eq 1 -and $args[0] -is [array]){
+        $params = $args[0]
+    }
+
+    foreach ($file in $params){
+        if ($rawinput){
+
+            $tmpfilename = "$([system.io.path]::GetTempFileName())__gdif__" 
+            $string = $file
+            if ($flOss){
+                $string = $string | format-list | out-string -stream
+            }
+            if ($csvoss){
+                $string = $string | convertto-csv | out-string -stream
+            }
+            $tmpfile = $string | set-content -path $tmpfilename -confirm:$false 
+            $files += convert-path $tmpfilename
+
+
+        }else{
+
+            if (-not (test-path $file)){
+                write-error "file not found: $file"
+                return
+            }
+
+            $files += convert-path $file
+        }
+
+    }
+
+    if ($files.count -ne 2){
+        "incorrect number of files to compare"
+        return
+    }
+
+
+    $command = 'git diff -b --no-index --color-words '
+    foreach ($file in $files){
+#        $command += """$($file -replace ' ','\ ')"" "
+        $command += """$file"" "
+    }
+
+    write-verbose $command
+    $lines = [scriptblock]::create($command).invoke() -split "`n"
+
+    if (-not $format){
+        write-output $lines
+        return
+    }
+
+    $lines -replace "($([convert]::tochar(27))\[\d*m@@.*?@@$([convert]::tochar(27))\[\d*m)\s","`n`$1`n`n" | write-ansicoloredoutput 
+
+
+
+#    $command = 'git diff -b --no-index '
+#    foreach ($file in $files){
+#        $command += """$($file -replace ' ','\ ')"" "
+#    }
+#
+#
+#$headerDone = $true
+#
+##    $command
+#    foreach ($contentLine in [scriptblock]::create($command).invoke()){
+#
+#        if ($noformat){
+#            $contentLine
+#            continue
+#        }
+#
+#        #based on unified diff / results of git diff
+#
+#        if ($contentLine -match "^diff --git") {
+#            Write-Host "`n`n`n$contentLine" -ForegroundColor Cyan 
+#            $headerDone = $false
+#        } elseif ($headerDone -eq $false -and $contentLine -match "^Index") {
+#            Write-Host $contentLine -ForegroundColor DarkCyan 
+#        } elseif ($headerDone -eq $false -and $contentLine -match "^\+{3}\s") {
+#            Write-Host $contentLine -ForegroundColor Green 
+#        } elseif ($headerDone -eq $false -and $contentLine -match "^\-{3}\s") {
+#            Write-Host $contentLine -ForegroundColor Red 
+#        } elseif ($headerDone -eq $false -and $contentLine -match "^\={3}\s") {
+#            Write-Host $contentLine -ForegroundColor DarkGray 
+#        } elseif ($contentLine -match "^\@{2}") {
+#            Write-Host "`n$contentLine`n" -ForegroundColor White 
+#            $headerDone = $true
+#        } elseif ($contentLine -match "^\+") {
+#            Write-Host $contentLine -ForegroundColor DarkGreen 
+#        } elseif ($contentLine -match "^\-") {
+#            Write-Host $contentLine -ForegroundColor DarkRed
+#        } else {
+#            Write-Host $contentLine -foregroundcolor Gray 
+#        }
+#    }
+}
+
+function invoke-xslt{
+    param(
+        [string]$Xml,
+        [string]$Xslt
+    )
+
+    try{
+
+        if (-not $xml -or $xml -eq ""){
+            write-error "Invalid `$Xml: Null or Empty"
+            return
+        }
+
+        if (-not $xslt -or $xslt -eq ""){
+            write-error "Invalid `$Xslt: Null or Empty"
+            return
+        }
+
+        $test = test-xml $xml
+        if (-not $test.isvalid){
+            write-error "Invalid `$Xml: $($test.message)"
+            return
+        }
+
+        $test = test-xml $xslt
+        if (-not $test.isvalid){
+            write-error "Invalid `$Xslt: $($test.message)"
+            return
+        }
+
+
+        $xsltStringReader = [system.io.StringReader]::new($xslt) 
+        $xmlStringReader = [system.io.StringReader]::new($xml)
+
+        $xsltXmlReader = [system.xml.XmlReader]::Create($xsltStringReader)
+        $xmlXmlReader = [system.xml.XmlReader]::Create($xmlStringReader)
+
+        $transformer = [system.xml.xsl.XslCompiledTransform]::new()
+        $transformer.Load($xsltxmlreader);
+
+        $resultStringWriter = [system.io.StringWriter]::new()
+        $resultXmlWriter = [system.xml.XmlWriter]::Create($resultstringwriter, $transformer.OutputSettings)
+
+        $transformer.Transform($xmlxmlreader, $resultxmlwriter)
+        $output = $resultstringwriter.ToString()
+
+    }finally{
+        if($resultxmlwriter){$resultxmlwriter.dispose()}
+        if($resultstringwriter){$resultstringwriter.dispose()}
+        if($xmlxmlreader){$xmlxmlreader.dispose()}
+        if($xsltxmlreader){$xsltxmlreader.dispose()}
+        if($xmlstringreader){$xmlstringreader.dispose()}
+        if($xsltstringreader){$xsltstringreader.dispose()}
+    }
+
+    $output
+}
+
+function Remove-AliasFromScript {
+
+    param(
+        [parameter(ValueFromPipeline=$true)]$scriptText
+    )
+
+    $aliases = @{}
+
+    get-alias | foreach-object { $aliases.add($_.name, $_.definition)}
+
+    $errors = $null
+    $changedText = $scripttext
+
+    $parsedTokens = [system.management.automation.psparser]::Tokenize($changedText, [ref]$errors) | Where-Object { $_.type -eq "command" } 
+
+    foreach ($token in $parsedTokens){
+
+        if($aliases.($token.content)) {
+            $changedText = $changedText -replace ('(?<=(\W|\b|^))' + [regex]::Escape($token.content) + '(?=(\W|\b|$))'), $aliases.($token.content)
+        }
+    }
+
+    write-output $changedText
+
+} 
+
+function re{
+    param(
+        [parameter(mandatory,valuefrompipeline)]$String
+    )
+    begin{
+    }
+    process{
+        [System.Text.RegularExpressions.regex]::Escape($string)
+    }
+    end{
+    }
+}
+
+function get-imagefromzpl{
+    param(
+        $Zpl,
+        $OutputPngFile
+    )
+
+    if (test-path $OutputPngFile){
+        write-output 'file already exists'
+        return
+    }
+
+    $dir = split-path $OutputPngFile -parent
+
+    if (-not $dir -or $dir.trim().length -eq 0){
+        $dir = '.'
+    }
+
+    if (-not (test-path $dir)){
+        write-output 'invalid directory'
+        return
+    }
+
+    Invoke-RestMethod  -Method Post  -Uri http://api.labelary.com/v1/printers/24dpmm/labels/4x6/0/  -ContentType "application/x-www-form-urlencoded" -body $zpl -outfile $OutputPngFile
+
+}
+
+function ConvertFrom-GZip{
+    param(
+        $GZipBytes,
+        [switch]$Raw
+    )
+    try{
+        $stream = [io.memorystream]::new($gzipbytes)
+        $data = [System.IO.Compression.GZipStream]::new($stream,[system.io.compression.compressionmode]::decompress)
+        $reader = [system.io.streamreader]::new($data)
+
+        $text = $reader.readtoend()
+
+        $output = $null
+
+        if ($raw){
+            $output = $text
+        }else{
+            $output = $text -split "`n"
+        }
+
+        write-output $output
+    }finally{
+        if ($reader){
+            $reader.close()
+        }
+        if ($data){
+            $data.close()
+        }
+        if ($stream){
+            $stream.close()
+        }
+    }
+}
+function Read-ZippedFile{
+    Param(
+        [parameter(valuefrompipeline)]$ZippedFile,
+        [validateset('Zip','GZip')]$CompressionType = 'Zip',
+        [switch]$InferObjectTypeFromFileExtension,
+        [switch]$AsHashTable,
+        [switch]$Raw,
+        [switch]$ListingOnly
+    )
+
+
+    if (-not (test-path $zippedfile -pathtype leaf)){
+        write-output "$zippedfile not found"
+        return
+    }
+
+    $zippedfile = (convert-path $zippedfile)
+
+    if ($compressiontype -eq 'zip'){
+
+        try{
+
+            $zipfile = [System.IO.Compression.zipfile]::open($zippedfile,[system.io.compression.ziparchivemode]::read)
+            $hashtable = @{}
+
+            foreach ($entry in $zipfile.entries){
+                $text = $null
+                $result = [pscustomobject]@{
+                    Name = $entry.fullname
+                    Contents = $null
+                }
+                if ($listingonly){
+                    $result
+                }else{
+                    try{
+                        $stream = $entry.open()
+                        $reader = [system.io.streamreader]::new($stream)
+                        $text = $reader.readtoend()
+
+                        if ($inferobjecttypefromfileextension){
+                            if ($entry.name -match '\.xml$'){
+                                $contents = [xml]$text
+                            }elseif ($entry.name -match '\.csv$'){
+                                $contents = $text | convertfrom-csv
+                            }else{
+                                if ($raw){
+                                    $contents = $text
+                                }else{
+                                    $contents = $text -split "`r?`n"
+                                }
+                            }
+                        }else{
+                            if ($raw){
+                                $contents = $text
+                            }else{
+                                $contents = $text -split "`r?`n"
+                            }
+                        }
+
+                        $result.contents = $contents
+
+                        if ($ashashtable){
+                            $hashtable.add($result.name,$result.contents)
+                        }else{
+                            $result
+                        }
+                    }finally{
+                        if ($reader){
+                            $reader.close()
+                        }
+                        if ($stream){
+                            $stream.close()
+                        }
+                    }
+                }
+
+            }
+            
+            if ($ashashtable){
+                $hashtable
+            }
+        }finally{
+            if ($zipfile){
+                $zipfile.dispose()
+            }
+        }
+    }elseif ($compressiontype -eq 'gzip'){
+        try{
+            $stream = [system.io.filestream]::new($zippedfile,[system.io.filemode]::open)
+            $data = [System.IO.Compression.GZipStream]::new($stream,[system.io.compression.compressionmode]::decompress)
+            $reader = [system.io.streamreader]::new($data)
+
+            $text = $reader.readtoend()
+
+            if ($raw){
+                $contents = $text
+            }else{
+                $contents = $text -split "`r?`n"
+            }
+            $contents
+        }finally{
+            if ($reader){
+                $reader.close()
+            }
+            if ($data){
+                $data.close()
+            }
+            if ($stream){
+                $stream.close()
+            }
+        }
+    }
+}
+
+function deepclone{
+    param(
+        $SourceObject
+    )
+
+    $tmp = [System.Management.Automation.PSSerializer]::Serialize($sourceObject, [int32]::MaxValue)
+    write-output ([System.Management.Automation.PSSerializer]::Deserialize($tmp))
+}
+
+
+function Join-Collections{
+    [CmdletBinding(DefaultParameterSetName="Inner")]
+    param(
+        [parameter(parametersetname='Inner',position=0)][parameter(parametersetname='Left',position=0)]$LeftSide,
+        [parameter(parametersetname='Inner',position=1)][parameter(parametersetname='Left',position=1)]$RightSide,
+        [parameter(parametersetname='Inner',position=2)][parameter(parametersetname='Left',position=2)]$JoinConditions,
+        [parameter(parametersetname='Left')][switch]$LeftJoin,
+        [parameter(parametersetname='Left')][switch]$UnmatchedOnly
+        
+
+    ) 
+
+    if ($joinConditions){
+        $outerkeystring = [text.stringbuilder]::new()
+        $innerkeystring = [text.stringbuilder]::new()
+
+        $null = $outerkeystring.append("[pscustomobject]@{")
+        $null = $innerkeystring.append("[pscustomobject]@{")
+
+        $counter = 0;
+        foreach($record in $joinconditions.getenumerator()){
+            $counter++
+            $null = $record.name.tostring() -match '(?<type>^\[[^\]]+\])?(?<value>.*)' 
+            $null = $outerkeystring.append("$counter=$($matches.type)(`$args[0].'$($matches.value)');")
+
+            $null = $record.value.tostring() -match '(?<type>^\[[^\]]+\])?(?<value>.*)' 
+            $null = $innerkeystring.append("$counter=$($matches.type)(`$args[0].'$($matches.value)');")
+        }
+
+        $null = $outerkeystring.append("} | convertto-json -compress")
+        $null = $innerkeystring.append("} | convertto-json -compress")
+
+    }else{
+        $outerkeystring = '$args[0]'
+        $innerkeystring = '$args[0]'
+    }
+
+
+    if ($leftjoin){
+        $join = [scriptblock]::create(",([linq.enumerable]::groupjoin([system.collections.generic.ienumerable[system.object]]`$leftside,[system.collections.generic.ienumerable[system.object]]`$rightside,[func[object,object]]{$($outerkeystring.tostring())},[func[object,object]]{$($innerkeystring.tostring())},[func[object,[system.collections.generic.ienumerable[system.object]],object]]{[pscustomobject]@{LeftSide=`$args[0];RightSide=`$args[1]}}))")
+    }else{
+        $join = [scriptblock]::create(",([linq.enumerable]::join([system.collections.generic.ienumerable[system.object]]`$leftside,[system.collections.generic.ienumerable[system.object]]`$rightside,[func[object,object]]{$($outerkeystring.tostring())},[func[object,object]]{$($innerkeystring.tostring())},[func[object,object,object]]{[pscustomobject]@{LeftSide=`$args[0];RightSide=`$args[1]}}))")
+    }
+
+    write-verbose $join.tostring()
+
+    $results = $join.invoke()| % {$_}
+    if ($UnmatchedOnly){
+        $results = $results | where {-not $_.rightside -or $_.rightside.gettype().name -match 'emptypartition'} | % {$_.leftside}
+    }
+
+    $results
+
+}
+
+function t {
+    [CmdletBinding()] 
+    param(
+        [parameter(valuefrompipeline)]$Value = $null,
+        [parameter(mandatory,position=0)][string]$VariableName,
+        [switch]$NoOutput
+    )
+    begin{
+        $scope = get-responsevariablescope
+        $pipelinecount = 0
+        $result = [collections.generic.list[object]]::new()
+        $onlyhashtables = $true
+    }
+    process{
+        $pipelinecount++
+        if ($onlyhashtables -and $value -isnot [hashtable]){
+            $onlyhashtables = $false
+        }
+        $result.add($value)
+    }
+    end{
+
+        if ($pipelinecount -eq 1){
+            $result = $result[0]
+        }else{
+
+            if ($onlyhashtables){
+                $hashresult = [System.Collections.Specialized.OrderedDictionary]::new([System.StringComparer]::OrdinalIgnoreCase)
+                foreach($record in $result){
+                    foreach($key in $record.keys){
+                        $hashresult.add($key,$record[$key])
+                    }
+                }
+                $result = $hashresult
+            }
+        }
+
+        if (get-variable $variablename -scope $scope -ErrorAction SilentlyContinue){
+            remove-variable $variablename -scope $scope -confirm:$false
+        }
+        set-variable $variablename -value $result -scope $scope -confirm:$false
+
+        if (-not $nooutput){
+            $result
+        }
+    }
+
+}
+
+function e {
+    [CmdletBinding()]
+    param(
+        [parameter(valuefrompipeline)]$Data,
+        [parameter(position=0)]$PropertyName,
+        [parameter(position=1)]$First = $null,
+        [parameter(position=2)]$Skip = 0
+    )
+    begin{
+        $counter = 0
+    }
+    process{
+        $counter++
+        if ($skip -gt 0 -and $counter -le $skip){
+            return
+        }
+        if ($first -and $counter -gt $first + $skip){
+            return
+        }
+
+        $data | select-object -expand $propertyname
+    }
+    end{
+    }
+}
+
+function capitalize{
+    param(
+        [parameter(valuefrompipeline)]$String,
+        [parameter(position=0)]$CapitalizeAfterBackreference = '^|_'
+    )
+
+    begin{
+    }
+
+    process{
+        $dolower = $string |select-string "(?<!$capitalizeafterbackreference)(.)" -all |select -exp matches
+        $chars = $string.tochararray()
+        $asdf = for($x=0;$x-lt $chars.count;$x++){
+            if ($x -in $dolower.index){
+                $chars[$x].tostring().tolower()
+            }else{
+                $chars[$x]
+            }
+        }
+    
+        $asdf -join ''
+    }
+    end{
+    }
+}
+
+function format-stringwithlinenumbers{
+    param(
+        [parameter(valuefrompipeline)][string]$Line
+    )
+
+    begin{
+        $num = 0
+    }
+    process{
+        "{0:0000}: {1}" -f ++$num,$line
+    }
+    end{
+    }
+}
+
+function Get-LdapObject{
+    param(
+        [hashtable]$Filters = @{objectCategory='person';sAMAccountName='nzeleski'},
+#        [validateset('asdf.com')]
+        $DomainName = 'asdf.com'
+    )
+
+    $domain = [adsi]"LDAP://$domainname"
+    $search = [System.DirectoryServices.DirectorySearcher]::new($domain)
+    $search.pagesize = 200
+
+    $filter = [text.stringbuilder]::new()
+    $null = $filter.append("(&")
+
+    foreach ($key in $filters.keys){
+        $null = $filter.append("($key=$($filters[$key]))")
+    }
+
+    $null = $filter.append(")")
+
+    $search.filter = $filter.tostring() 
+    $records = $search.findall() 
+
+    foreach($record in $records){
+        $hash = [System.Collections.Specialized.OrderedDictionary]::new()
+        $hash.add('__path',$record.path)
+
+        $keys = $record.properties.keys|sort
+
+        foreach($key in $keys){
+            $values = $record.properties[$key].foreach({$_})
+            if ($values.count -lt 1){
+                $value = $null
+            }elseif ($values.count -eq 1){
+                $value = $values[0]
+            }else{
+                $value = [System.Linq.enumerable]::tolist($values)
+            }
+            $hash.add($key,$value)
+        }
+        [pscustomobject]$hash
+    }
+}
+
+function hascount{
+    [CmdletBinding()]
+
+    param (
+        [parameter(parametersetname="GreaterThan",valuefrompipeline)]
+        [parameter(parametersetname="LessThan",valuefrompipeline)]
+        [parameter(parametersetname="Equals",valuefrompipeline)]
+        $Record,
+        [parameter(parametersetname="GreaterThan",position=0,mandatory)]$GreaterThan,
+        [parameter(parametersetname="LessThan",position=0,mandatory)]$LessThan,
+        [parameter(parametersetname="Equals",position=0,mandatory)]$Equals
+    )
+
+    begin{
+        $count = 0
+    }
+    process{
+        $count++
+    }
+    end{
+        if (
+            ($greaterthan -ne $null -and $count -gt $greaterthan) -or
+            ($lessthan -ne $null -and $count -lt $lessthan) -or
+            ($equals -ne $null -and $count -eq $equals)
+        ){
+            write-output $true
+        }else{
+            write-output $false
+        }
+    }
+}
+
+function ConvertTo-ByteArray{
+    param(
+        [parameter(position=1,valuefrompipeline)]$String,
+        [parameter(position=0)][validateset('ASCII','BigEndianUnicode','Default','Unicode','UTF8','UTF7','UTF32')]$Encoding = 'UTF8'
+    )
+    begin{
+    }
+    process{
+        $type = [scriptblock]::create("[system.text.encoding]::$encoding").invoke()
+        $type.getbytes($string)
+    }
+    end{
+    }
+    
+}
+
+function Search-ObjectProperties{
+    param(
+        [parameter(valuefrompipeline)]$Object,
+        [parameter(position=0)]$Regex,
+        [switch]$NotMatch
+    )
+    begin{
+    }
+    process{
+        if (-not $nomatch){
+            $object | where {[System.Text.RegularExpressions.Regex]::Unescape(($_ | convertto-json -depth 10)) -match $regex}
+        }else{
+            $object | where {[System.Text.RegularExpressions.Regex]::Unescape(($_ | convertto-json -depth 10)) -notmatch $regex}
+        }
+    }
+    end{
+    }
+}
+
+function Convertto-JsonFromXml{
+    param(
+        [parameter(valuefrompipeline)]
+        $xml,
+        [switch]$Raw,
+        [switch]$AsJson,
+        [switch]$AsJsonCompressed
+    )
+
+    begin{
+    }
+    process{
+        $json = [Newtonsoft.Json.jsonconvert]::Serializeobject($xml) 
+
+        if ($raw){
+            write-output $json #| convertto-
+        }else{
+            $output =  $json|convertfrom-json
+            $prop = $output | get-member -membertype noteproperty | select -expand name
+            $output = $output."$prop"
+
+            if ($asjson){
+                $output | convertto-json -depth 25
+            }elseif ($asjsoncompressed){
+                $output | convertto-json -depth 25 -compress
+            }else{
+                write-output $output
+            }
+        }
+
+    }
+    end{
+    }
+    
+}
+
+function Set-RemoteProfile {
+    param(
+        [parameter(valuefrompipeline)]
+        [System.Management.Automation.Runspaces.pssession]$PsSession,
+
+        [parameter(position=0)]
+        [object]$ProfilePath = 'onedrive:\pwsh\remote-profile\profile.ps1'
+    )
+    begin{
+    }
+    process{
+        $profilepath = get-childitem $profilepath -file -erroraction silentlycontinue
+        if (-not $profilepath){
+            throw "invalid profile path"
+        }
+
+        $null = Invoke-Command -Session $pssession -filepath $profilepath.fullname
+        write-output $pssession
+
+    }
+    end{
+    }
+}
+
+function Rename-FileExtension{
+    param(
+        [parameter(valuefrompipeline)]
+        $File,
+
+        [parameter(position=0)]
+        [string]$NewExtension
+    )
+    begin{
+    }
+    process{
+
+        $from = get-item $file -erroraction silentlycontinue
+
+        if (-not $from -or -not $from.extension -or $from.psiscontainer){
+            return
+        }
+
+        if (-not $newextension.startswith('.')){
+            $newextension = ".$newextension"
+        }
+
+        $new = "$($from.directoryname)\$($from.basename)$newextension"
+
+        rename-item $from.fullname $new -passthru -confirm:$false
+
+
+    }
+    end{
+    }
+}
+
+function Where-ObjectProperty{
+    param(
+        [parameter(valuefrompipeline)]
+        $Value,
+        [switch]$Not
+    )
+
+    begin{
+    }
+    process{
+        if ((-not $not -and $value) -or ($not -and -not $value)){
+            $value
+        }
+    }
+    end{
+    }
+}
+
+function codegrep {
+    [CmdletBinding()]
+    param(
+
+        [parameter(position=0)]
+        [string]$Regex,
+
+        [parameter(position=1)]
+        [string]$RootDirectory = ".",
+
+        [parameter(position=2)]
+        [string]$Exclude = $null,
+
+        [switch]$NoFilter,
+
+        [switch]$PathsOnly
+    )
+    
+    begin{
+    }
+    process{
+        $files = get-childitem $rootdirectory -include *.cs,*.vb, *.config,*.json,*.aspx,*.rdl,*html,*.csproj,*.vbproj,*.runsettings,*.ps1,*.psm1,*.js,*.jsx,*.ts,*.tsx,*.css,*.fsi,*.fsx,*.fsproj,*.sql,*.pls,*.pkb,*.pks -recurse -exclude $exclude
+
+        if (-not $nofilter){
+            $files = $files | where fullname -notmatch '\\(obj|bin)\\' 
+        }
+
+        $output = $files | select-string $regex -allmatches
+        if ($pathsonly){
+            $output = $output | select-object path -unique
+        }
+
+        write-output $output
+
+    }
+    end{
+    }
+}
