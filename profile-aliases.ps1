@@ -14,6 +14,15 @@ $aliases = @{
 
     #custom functions
     split = 'profile-module\split-string'
+    cf = 'profile-module\get-function'
+    gg = 'profile-module\get-grepmatchvalues'
+    nsum = 'profile-module\convert-numberstringtosum'
+    zcat = 'profile-module\Read-ZippedFile'
+    j = 'profile-module\Join-Collections'
+    ldap = 'profile-module\Get-LdapObject'
+    getbytes = 'profile-module\ConvertTo-ByteArray'
+    ogrep = 'profile-module\Search-ObjectProperties'
+    whereis = 'profile-module\Where-ObjectProperty'
 
     #queryhub
     OAdd = 'queryhub\Add-OracleQueryHubConnection'
