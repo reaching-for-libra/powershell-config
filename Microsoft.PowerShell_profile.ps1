@@ -43,6 +43,11 @@ if ($psversiontable.platform -eq 'unix'){
 #module imports
 import-module profilehome:\profile-module.psm1
 
+$queryhub = (get-module QueryHub -list -erroraction silentlycontinue)
+if ($queryhub){
+    $queryhub | import-module 
+}
+
 #default parameters
 $PSDefaultParameterValues.("Format-Table:Autosize") = $true
 $PSDefaultParameterValues.("Format-Table:Property") = "*"
