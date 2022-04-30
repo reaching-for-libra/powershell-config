@@ -11,6 +11,7 @@ $aliases = @{
     join = 'join-string'
     cred = 'get-credential'
     which = 'get-command'
+    cp = 'copy-item'
 
     #custom functions
     split = 'profile-module\split-string'
@@ -78,6 +79,21 @@ $aliases = @{
     sfile = 'queryhub\Invoke-sqlserverQueryFromFile'
     ss = 'queryhub\invoke-sqlserverscript'
     sslist = 'queryhub\get-sqlserverscripts'
+
+    PAdd = 'queryhub\Add-PostgresQueryHubConnection'
+    PConnections = 'queryhub\Get-PostgresQueryHubConnections'
+    PDefault = 'queryhub\Get-PostgresDefaultQueryHubConnection'
+    PErrors = 'queryhub\Get-PostgresErrors'
+    PFile = 'queryhub\Invoke-PostgresQueryFromFile'
+    PLastError = 'queryhub\Get-LastPostgresQueryError'
+    PLastRequest = 'queryhub\Get-LastPostgresQueryRequest'
+    PLastTime = 'queryhub\Get-LastPostgresQueryTime'
+    PRemove = 'queryhub\Remove-PostgresQueryHubConnection'
+    PSet = 'queryhub\Set-PostgresDefaultQueryHubConnection'
+    PSql = 'queryhub\Invoke-PostgresQuery'
+    PTable = 'queryhub\Get-PostgresTableSchema'
+    PTables = 'queryhub\Get-PostgresTableNames'
+    PTest = 'queryhub\Test-PostgresConnection'
 }
 
 
@@ -148,6 +164,11 @@ if(Test-Path variable:\slast) {
     Remove-Item variable:\slast -Force
 }
 $executioncontext.SessionState.PSVariable.Set([NZ.PSScriptVariable]::new('SLast',{@(get-lastsqlserverqueryresult)},$null))
+
+if(Test-Path variable:\plast) {
+    Remove-Item variable:\plast -Force
+}
+$executioncontext.SessionState.PSVariable.Set([NZ.PSScriptVariable]::new('PLast',{@(get-lastpostgresqueryresult)},$null))
 
 #type accelerators
 [psobject].assembly.gettype("System.Management.Automation.TypeAccelerators")::add("a","System.Management.Automation.PSObject")

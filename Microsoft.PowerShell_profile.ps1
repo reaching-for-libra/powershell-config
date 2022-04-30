@@ -28,6 +28,20 @@ function global:"ProfileHome`:"(){
     set-location ProfileHome:
 }
 
+if (get-childitem $env:HOME\downloads -ea 0){
+    if (get-psdrive 'Downloads' -ea 0) {
+        remove-psdrive 'Downloads' -force -confirm:$false
+    }
+    new-psdrive -name 'Downloads' -psprovider filesystem -root $env:HOME\downloads -confirm:$false -scope global -erroraction stop
+
+    if (get-childitem function:'Downloads:' -ea 0) {
+        remove-item function:'Downloads:' -force -confirm:$false
+    }
+    function global:"Downloads`:"(){
+        set-location ProfileHome:
+    }
+}
+
 #platform specific
 if ($psversiontable.platform -eq 'unix'){
 
