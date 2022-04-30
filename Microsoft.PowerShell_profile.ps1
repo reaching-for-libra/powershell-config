@@ -80,3 +80,6 @@ $PSDefaultParameterValues.("Join-String:Separator") = [environment]::newline
 #psreadline
 . profilehome:\profile-psreadline.ps1
 
+if (get-childitem profilehome:\profile-ad-hoc.ps1 -ea 0) {
+    . profilehome:\profile-ad-hoc.ps1
+}

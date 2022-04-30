@@ -83,7 +83,6 @@ $aliases = @{
     PAdd = 'queryhub\Add-PostgresQueryHubConnection'
     PConnections = 'queryhub\Get-PostgresQueryHubConnections'
     PDefault = 'queryhub\Get-PostgresDefaultQueryHubConnection'
-    PErrors = 'queryhub\Get-PostgresErrors'
     PFile = 'queryhub\Invoke-PostgresQueryFromFile'
     PLastError = 'queryhub\Get-LastPostgresQueryError'
     PLastRequest = 'queryhub\Get-LastPostgresQueryRequest'

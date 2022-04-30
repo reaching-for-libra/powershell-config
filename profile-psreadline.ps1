@@ -88,8 +88,10 @@ $psstyle.fileinfo.directory = $ColorForegroundGreen
 $psstyle.fileinfo.executable = $ColorForegroundBrightYellow
 $psstyle.FileInfo.extension.clear()
 $psstyle.FileInfo.extension.add('.csv', $colorforegroundgray)
-$psstyle.Formatting.TableHeader = $ColorForegroundBlue
-$psstyle.Formatting.FormatAccent = $ColorForegroundBlue
+#$psstyle.Formatting.TableHeader = $ColorForegroundBlue
+#$psstyle.Formatting.FormatAccent = $ColorForegroundBlue
+$psstyle.Formatting.TableHeader = $ColorBackgroundBlue
+$psstyle.Formatting.FormatAccent = $ColorBackgroundBlue
 
 $PSStyle.OutputRendering = 'Host'
 
