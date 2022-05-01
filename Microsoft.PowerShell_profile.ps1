@@ -5,16 +5,18 @@
 if (get-psdrive 'Home' -ea 0) {
     remove-psdrive 'Home' -force -confirm:$false
 }
-if ($env:HOME){
-    new-psdrive -name 'Home' -psprovider filesystem -root $env:HOME -confirm:$false -scope global -erroraction stop
-}
-
 if (get-childitem function:'Home:' -ea 0) {
     remove-item function:'home:' -force -confirm:$false
 }
-function global:"Home`:"(){
-    set-location Home:
+
+if ($env:HOME){
+    new-psdrive -name 'Home' -psprovider filesystem -root $env:HOME -confirm:$false -scope global -erroraction stop
+    function global:"Home`:"(){
+        set-location Home:
+    }
+    home:
 }
+
 
 if (get-psdrive 'ProfileHome' -ea 0) {
     remove-psdrive 'ProfileHome' -force -confirm:$false
@@ -83,3 +85,4 @@ $PSDefaultParameterValues.("Join-String:Separator") = [environment]::newline
 if (get-childitem profilehome:\profile-ad-hoc.ps1 -ea 0) {
     . profilehome:\profile-ad-hoc.ps1
 }
+
