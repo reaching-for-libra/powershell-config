@@ -12,6 +12,7 @@ $aliases = @{
     cred = 'get-credential'
     which = 'get-command'
     cp = 'copy-item'
+    mv = 'move-item'
 
     #custom functions
     split = 'profile-module\split-string'

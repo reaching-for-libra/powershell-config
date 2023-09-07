@@ -2,6 +2,7 @@
 $FormatEnumerationLimit = 3 
 
 Update-FormatData -PrependPath ProfileHome:\formatting-files\MatchInfo.Format.ps1xml
+
 $MatchInfoPreference = @{
     Prefix = '--> '
     MatchVTSeq = $PSStyle.foreground.brightgreen

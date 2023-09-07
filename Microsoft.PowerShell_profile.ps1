@@ -56,6 +56,8 @@ if ($psversiontable.platform -eq 'unix'){
     set-location c:\
 }
 
+$env:POWERSHELL_TELEMETRY_OPTOUT = 1
+
 #module imports
 import-module profilehome:\profile-module.psm1
 
