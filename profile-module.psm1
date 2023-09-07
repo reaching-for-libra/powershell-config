@@ -1591,54 +1591,67 @@ function Join-Collections{
 
 }
 
+#proxy function to replace tee-object specifically for variables
+#tee-object sets variables after output, which means ctrl-c during large output will not set the variable
+#this function sets the variable and then displays the output
 function t {
-    [CmdletBinding()] 
+
+    [cmdletbinding()]
     param(
-        [parameter(valuefrompipeline)]$Value = $null,
-        [parameter(mandatory,position=0)][string]$VariableName,
+        [parameter(mandatory=$true, position=0)]
+        [string[]]$Name,
+
+        [parameter(position=1, valuefrompipeline)]
+        [System.Object]$Value,
+
         [switch]$NoOutput
     )
-    begin{
-        $scope = get-responsevariablescope
-        $pipelinecount = 0
-        $result = [collections.generic.list[object]]::new()
-        $onlyhashtables = $true
+
+    begin {
+        $outBuffer = $null
+        if ($PSBoundParameters.TryGetValue('OutBuffer', [ref]$outBuffer)) {
+            $PSBoundParameters['OutBuffer'] = 1
+        }
+
+        #don't prompt for confirmation - personal preference
+        $PSBoundParameters['Confirm'] = $false
+
+        #lift up to calling scope
+        $PSBoundParameters['Scope'] = 1
+
+        Remove-Variable -name $name -scope $psboundparameters['Scope'] -erroraction silentlycontinue -confirm:$false
+
+        $outNoOutput = $null
+        if ($PSBoundParameters.TryGetValue('NoOutput', [ref]$outBuffer)) {
+            $null = $PSBoundParameters.remove('NoOutput')
+        }
+
+
+        $wrappedCmd = $ExecutionContext.InvokeCommand.GetCommand('Microsoft.PowerShell.Utility\Set-Variable', [System.Management.Automation.CommandTypes]::Cmdlet)
+        $scriptCmd = {& $wrappedCmd @PSBoundParameters }
+
+        $steppablePipeline = $scriptCmd.GetSteppablePipeline($myInvocation.CommandOrigin)
+        $steppablePipeline.Begin($PSCmdlet)
     }
-    process{
-        $pipelinecount++
-        if ($onlyhashtables -and $value -isnot [hashtable]){
-            $onlyhashtables = $false
-        }
-        $result.add($value)
+
+    process {
+        $steppablePipeline.Process($_)
     }
-    end{
 
-        if ($pipelinecount -eq 1){
-            $result = $result[0]
-        }else{
-
-            if ($onlyhashtables){
-                $hashresult = [System.Collections.Specialized.OrderedDictionary]::new([System.StringComparer]::OrdinalIgnoreCase)
-                foreach($record in $result){
-                    foreach($key in $record.keys){
-                        $hashresult.add($key,$record[$key])
-                    }
-                }
-                $result = $hashresult
-            }
-        }
-
-        if (get-variable $variablename -scope $scope -ErrorAction SilentlyContinue){
-            remove-variable $variablename -scope $scope -confirm:$false
-        }
-        set-variable $variablename -value $result -scope $scope -confirm:$false
-
+    end {
+        $steppablePipeline.End()
         if (-not $nooutput){
-            $result
+            Get-Variable -name $name -scope $psboundparameters['Scope']| Select-Object -Expand Value
         }
     }
 
+    clean {
+        if ($null -ne $steppablePipeline) {
+            $steppablePipeline.Clean()
+        }
+    }
 }
+
 
 function e {
     [CmdletBinding()]

@@ -136,6 +136,33 @@ Set-PSReadLineKeyHandler -Key RightArrow `
     }
 }
 
+Set-PSReadlineKeyHandler -Key Ctrl+i -BriefDescription ConvertFromTabbedCsv -LongDescription "Grab the clipboard text and execute ConvertFrom-Csv with tab as a delimiter" -ScriptBlock {
+
+
+    param($key, $arg)
+
+    $data = Get-Clipboard -raw
+
+    [microsoft.powershell.PSConsoleReadLine]::Insert("@'`n")
+    [microsoft.powershell.psconsolereadline]::Insert($data)
+    [microsoft.powershell.PSConsoleReadLine]::Insert("`n'@")
+    [microsoft.powershell.PSConsoleReadLine]::Insert(" | ConvertFrom-Csv -Delimiter ""`t""")
+}
+
+Set-PSReadlineKeyHandler -Key Ctrl+shift+h -BriefDescription PasteAsHereStringFromGetClipboard -LongDescription "Paste the clipboard text as a here string using Get-Clipboard" -ScriptBlock {
+
+
+    param($key, $arg)
+
+    $data = Get-Clipboard -raw
+
+
+    [microsoft.powershell.PSConsoleReadLine]::Insert("@'`n")
+    [microsoft.powershell.psconsolereadline]::Insert($data)
+    [microsoft.powershell.PSConsoleReadLine]::Insert("`n'@")
+}
+
+
 Set-PSReadlineKeyHandler -Key Ctrl+h -BriefDescription PasteAsHereString -LongDescription "Paste the clipboard text as a here string" -ScriptBlock {
 
     param($key, $arg)
