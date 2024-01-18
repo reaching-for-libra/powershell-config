@@ -117,6 +117,38 @@ set-psreadlinekeyhandler -key 'shift+5' -function GotoBrace -vimode command
 
 set-psreadlinekeyhandler -key 'ctrl+r' -function Redo -vimode command
 
+Set-PSReadlineKeyHandler -Key '$' `
+                         -BriefDescription ViGoToEnd `
+                         -LongDescription "Go to end" `
+                         -vimode command `
+                         -ScriptBlock {
+    param($key, $arg)
+
+    #[Microsoft.PowerShell.PSConsoleReadLine]::EndOfLine()
+
+    $line = $null
+    $cursor = $null
+    [Microsoft.PowerShell.PSConsoleReadLine]::GetBufferState([ref]$line, [ref]$cursor)
+    [Microsoft.PowerShell.PSConsoleReadLine]::SetCursorPosition($line.Length)
+}
+
+Set-PSReadlineKeyHandler -Key 'Shift+A' `
+                         -BriefDescription ViGoToEndAndEnterInsertMode `
+                         -LongDescription "Go to end and enter Insert Mode" `
+                         -vimode command `
+                         -ScriptBlock {
+    param($key, $arg)
+
+    #[Microsoft.PowerShell.PSConsoleReadLine]::EndOfLine()
+
+    $line = $null
+    $cursor = $null
+    [Microsoft.PowerShell.PSConsoleReadLine]::GetBufferState([ref]$line, [ref]$cursor)
+    [Microsoft.PowerShell.PSConsoleReadLine]::SetCursorPosition($line.Length)
+    [Microsoft.PowerShell.PSConsoleReadLine]::ViInsertAtEnd()
+}
+
+
 # `ForwardChar` accepts the entire suggestion text when the cursor is at the end of the line.
 # This custom binding makes `RightArrow` behave similarly - accepting the next word instead of the entire suggestion text.
 Set-PSReadLineKeyHandler -Key RightArrow `
