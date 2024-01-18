@@ -7,7 +7,7 @@ Set-PSReadLineOption -bellstyle None
 Set-PSReadLineOption -PredictionSource History
 #Set-PSReadLineOption -PredictionViewStyle InLineView
 Set-PSReadLineOption -EditMode vi
-Set-PSReadLineOption -HistorySearchCursorMovesToEnd 
+#Set-PSReadLineOption -HistorySearchCursorMovesToEnd 
 
 
 function OnViModeChange {
