@@ -996,19 +996,24 @@ function get-function{
 
 function Get-GrepMatchValues{
     param(
-        [parameter(mandatory=$true,ValueFromPipeline=$true)] $Input
+        [parameter(mandatory=$true,ValueFromPipeline=$true)]
+        [Microsoft.PowerShell.Commands.MatchInfo[]]$Input,
+        [parameter(position=0)]
+        [string]$GroupName = '0'
     )
 
     begin{
     }
     process{
         foreach ($match in $input.matches){
-            $match.value 
+#            $match.value 
+            $match.groups | where name -eq $groupname | % value
         }
     }
     end{
     }
 }
+
 
 function Format-HexBytes{
     param(
