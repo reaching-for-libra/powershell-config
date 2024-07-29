@@ -1826,15 +1826,24 @@ function Search-ObjectProperties{
     begin{
     }
     process{
-        if (-not $nomatch){
-            $object | where {[System.Text.RegularExpressions.Regex]::Unescape(($_ | convertto-json -depth 10)) -match $regex}
+
+#        if (-not $notmatch){
+#            $object | where {[System.Text.RegularExpressions.Regex]::Unescape(($_ | convertto-json -depth 10)) -match $regex}
+#        }else{
+#            $object | where {[System.Text.RegularExpressions.Regex]::Unescape(($_ | convertto-json -depth 10)) -notmatch $regex}
+#        }
+
+        
+        if (-not $notmatch){
+            $object | where {($_ | ConvertTo-Xml).objects.object.property.'#text' -match $regex}
         }else{
-            $object | where {[System.Text.RegularExpressions.Regex]::Unescape(($_ | convertto-json -depth 10)) -notmatch $regex}
+            $object | where {($_ | ConvertTo-Xml).objects.object.property.'#text' -notmatch $regex}
         }
     }
     end{
     }
 }
+
 
 function Convertto-JsonFromXml{
     param(
