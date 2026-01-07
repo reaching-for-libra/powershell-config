@@ -1887,7 +1887,7 @@ function Set-RemoteProfile {
         [System.Management.Automation.Runspaces.pssession]$PsSession,
 
         [parameter(position=0)]
-        [object]$ProfilePath = 'onedrive:\pwsh\remote-profile\profile.ps1'
+        [object]$ProfilePath = 'profilehome:\remote-profile.ps1'
     )
     begin{
     }
