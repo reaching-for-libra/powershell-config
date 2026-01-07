@@ -1,0 +1,2323 @@
+
+$script:moduledirectory = split-path $MyInvocation.MyCommand.Definition -parent
+
+$script:vimrcdirectory = $null
+
+#$script:wslexe = "C:\wsl\ubuntu1804.exe"
+
+#adapted from script: http://www.indented.co.uk/2015/06/03/dynamic-parameters/
+function New-DynamicParameter {
+
+  [CmdLetBinding()]
+  param(
+    [Parameter(ValueFromPipeline=$true,HelpMessage='Dictionary to add created dynamic parameter')] [pscustomobject] $DynamicParameters = $null,
+    [Parameter(Mandatory = $true)] [ValidateNotNullOrEmpty()] [String]$Name,
+    [Object]$DefaultValue, 
+    [Type]$Type = "Object",
+    [Switch]$Mandatory,
+    [Int32]$Position = -2147483648,
+    [Switch]$ValueFromPipeline,
+    [Switch]$ValueFromPipelineByPropertyName,
+    [String[]]$ParameterSetNames = @("__AllParameterSets"),
+    [Switch]$ValidateNotNullOrEmpty,
+    [RegEx]$ValidatePattern,
+    [Text.RegularExpressions.RegexOptions]$ValidatePatternOptions = [Text.RegularExpressions.RegexOptions]::IgnoreCase,
+    [Object[]]$ValidateRange,
+    [ScriptBlock]$ValidateScript,
+    [Object[]]$ValidateSet,
+    [Boolean]$ValidateSetIgnoreCase = $true
+  )
+  
+  $AttributeCollection = New-Object 'Collections.ObjectModel.Collection[System.Attribute]'
+
+foreach ($parametersetname in $parametersetnames){
+  $ParameterAttribute = New-Object Management.Automation.ParameterAttribute
+  $ParameterAttribute.Mandatory = $Mandatory
+  $ParameterAttribute.Position = $Position
+  $ParameterAttribute.ValueFromPipeline = $ValueFromPipeline
+  $ParameterAttribute.ValueFromPipelineByPropertyName = $ValueFromPipelineByPropertyName
+  $ParameterAttribute.parametersetname = $parametersetname
+
+  $AttributeCollection.add($ParameterAttribute)
+}
+
+  if ($psboundparameters.ContainsKey('ValidateNotNullOrEmpty')) {
+    $AttributeCollection.add((New-Object Management.Automation.ValidateNotNullOrEmptyAttribute))
+  }
+  if ($psboundparameters.ContainsKey('ValidatePattern') -and $validatepattern) {
+    $ValidatePatternAttribute = New-Object Management.Automation.ValidatePatternAttribute($ValidatePattern.ToString())
+    $ValidatePatternAttribute.Options = $ValidatePatternOptions
+
+    $AttributeCollection.add($ValidatePatternAttribute)
+  }
+  if ($psboundparameters.ContainsKey('ValidateRange') -and $validrange) {
+    $AttributeCollection.add((New-Object Management.Automation.ValidateRangeAttribute($ValidateRange)))
+  }
+  if ($psboundparameters.ContainsKey('ValidateScript') -and $validatescript) {
+    $AttributeCollection.add((New-Object Management.Automation.ValidateScriptAttribute($ValidateScript)))
+  }
+  if ($psboundparameters.ContainsKey('ValidateSet') -and $validateset) {
+    $ValidateSetAttribute = New-Object Management.Automation.ValidateSetAttribute($ValidateSet)
+    $ValidateSetAttribute.IgnoreCase = $ValidateSetIgnoreCase
+
+    $AttributeCollection.add($ValidateSetAttribute)
+  }
+
+  $Parameter = New-Object Management.Automation.RuntimeDefinedParameter($Name, $Type, $AttributeCollection)
+
+    if (-not $DynamicParameters){
+        
+        $DynamicParameters = new-object PSObject
+        $DynamicParameters | add-member -membertype NoteProperty -name "ParameterDictionary" -value ([System.Management.Automation.RuntimeDefinedParameterDictionary]::new())
+        $DynamicParameters | add-member -membertype NoteProperty -name "DefaultValues" -value ([hashtable]::new())
+    }
+
+    $DynamicParameters.parameterdictionary.Add($Name, $Parameter)
+
+  if ($psboundparameters.ContainsKey('DefaultValue')) {
+    $DynamicParameters.defaultvalues.add($Name,$defaultvalue)
+  }else{
+    if ($type.name -eq 'SwitchParameter'){
+      $DynamicParameters.defaultvalues.add($Name,$false)
+    }else{
+      $DynamicParameters.defaultvalues.add($Name,$null)
+    }
+  }
+
+    $DynamicParameters
+}
+
+function Set-DynamicParameterValues{
+    param(
+        [parameter(mandatory=$true)]$params,
+        [parameter(mandatory=$true)]$defaultparams
+    )
+
+        foreach ($parameter in $defaultparams.defaultvalues.getenumerator()){
+            if ($params[$parameter.key] -eq $null){
+                $params[$parameter.key] = $parameter.value
+            }
+        }
+        $params
+}
+
+function Set-DynamicParameterVariables{
+    param(
+        [parameter(mandatory=$true)]$params
+    )
+
+    if ((get-pscallstack)[1].scriptname -eq (get-pscallstack)[0].scriptname){
+        $variablescope = 1
+    }else{
+        $variablescope = 2
+    }
+
+    foreach ($parameter in $params.getenumerator()){
+        set-variable -name $parameter.key -value $parameter.value -scope $variablescope -confirm:$false #scope 1 means immediate parent
+    }
+}
+
+function Set-VimRcDirectory{
+    param(
+        $Directory
+    )
+
+    $script:vimrcdirectory = $directory
+}
+
+if (test-path $script:moduledirectory\bring-to-front.exe){
+    function Show-ProcessWindow{
+        param(
+            [parameter(valuefrompipeline)][int]$WindowHandle
+        )
+        process{
+            $exe = get-childitem $script:moduledirectory/bring-to-front.exe -erroraction silentlycontinue
+            & $exe $windowhandle
+        }
+    }
+}
+if (test-path $script:moduledirectory\get-command-line-for-process.exe){
+    function Get-ProcessCommandLine{
+        param(
+            [parameter(valuefrompipeline)][int]$ProcessId
+        )
+        process{
+            $exe = get-childitem $script:moduledirectory/get-command-line-for-process.exe -erroraction silentlycontinue
+            & $exe $processid
+        }
+    }
+}
+if (test-path $script:moduledirectory\get-process-id-by-command-line.exe){
+    function Get-ProcessIdFromCommandLine{
+        param(
+            [parameter(valuefrompipeline)][string]$CommandLine
+        )
+        process{
+            $exe = get-childitem $script:moduledirectory/get-process-id-by-command-line.exe -erroraction silentlycontinue
+            & $exe $commandline.replace('"','\""')
+        }
+    }
+}
+if (test-path $script:moduledirectory\csv-to-xlsx.exe){
+    function Copy-CsvFileToXlsx{
+        param(
+            [parameter(valuefrompipeline)][string]$FilePath
+        )
+        process{
+            $exe = get-childitem $script:moduledirectory/csv-to-xlsx.exe -erroraction silentlycontinue
+            & $exe $FilePath
+        }
+    }
+}
+
+# add-type -path "C:\app\nzeleski\product\12.1.0\client_1\ODP.NET\managed\common\Oracle.ManagedDataAccess.dll"
+#add-type -path C:\app\nzeleski\product\12.1.0\client_1\odp.net\managed\common\Oracle.ManagedDataAccess.dll
+
+if ((get-typedata -typename NZ.EmailRecord)){
+    remove-typedata -typename NZ.EmailRecord -confirm:$false
+}
+
+update-typedata -typename NZ.EmailRecord -membertype NoteProperty -membername EntryId -Value $null -confirm:$false
+update-typedata -typename NZ.EmailRecord -membertype NoteProperty -membername SentOn -Value $null -confirm:$false
+update-typedata -typename NZ.EmailRecord -membertype NoteProperty -membername From -Value $null -confirm:$false
+update-typedata -typename NZ.EmailRecord -membertype NoteProperty -membername To -Value $null -confirm:$false
+update-typedata -typename NZ.EmailRecord -membertype NoteProperty -membername Cc -Value $null -confirm:$false
+update-typedata -typename NZ.EmailRecord -membertype NoteProperty -membername Body -Value $null -confirm:$false
+update-typedata -typename NZ.EmailRecord -membertype NoteProperty -membername Attachments -Value $null -confirm:$false
+
+if ((get-typedata -typename NZ.OracleConnectionInfo)){
+    remove-typedata -typename NZ.OracleConnectionInfo -confirm:$false
+}
+
+update-typedata -typename NZ.OracleConnectionInfo -membertype NoteProperty -membername TnsName -value $null -confirm:$false
+update-typedata -typename NZ.OracleConnectionInfo -membertype NoteProperty -membername Host -value $null -confirm:$false
+update-typedata -typename NZ.OracleConnectionInfo -membertype NoteProperty -membername Port -value $null -confirm:$false
+update-typedata -typename NZ.OracleConnectionInfo -membertype NoteProperty -membername ServiceName -value $null -confirm:$false
+update-typedata -typename NZ.OracleConnectionInfo -membertype NoteProperty -membername TnsString -value $null -confirm:$false
+
+
+
+## New-ScriptVariable.ps1
+## http://www.leeholmes.com/blog/2009/03/26/more-tied-variables-in-powershell/
+
+if (-not ("NZ.PSScriptVariable" -as [type])) {
+    Add-Type @"
+    using System;
+    using System.Collections.ObjectModel;
+    using System.Management.Automation;
+
+    namespace NZ
+    {
+        public class PSScriptVariable : PSVariable
+        {
+            public PSScriptVariable(string name, ScriptBlock scriptGetter, ScriptBlock scriptSetter) : base(name, null, ScopedItemOptions.AllScope) {
+                getter = scriptGetter;
+                setter = scriptSetter;
+            }
+
+            private ScriptBlock getter;
+            private ScriptBlock setter;
+
+            public override object Value {
+                get {
+
+                    if(getter != null) {
+
+                        Collection<PSObject> results = getter.Invoke();
+
+                        if(results.Count == 1) {
+                            return results[0];
+
+                        } else {
+                            PSObject[] returnResults = new PSObject[results.Count];
+                            results.CopyTo(returnResults, 0);
+                            return returnResults;
+                        }
+                    } else { 
+                        return null; 
+                    }
+                }
+                set {
+                    if(setter != null) { setter.Invoke(value); }
+                }
+            }
+        }
+    }
+"@
+}
+
+
+
+        
+#################################################################################
+
+<#
+
+    Connect-RemoteDesktop
+
+
+#>
+
+function Connect-RemoteDesktop(){
+	param(
+		[parameter(Mandatory=$true,ValueFromPipeline=$true)] $name,
+        [switch] $Admin,
+		[switch] $NotSuperuser
+	)
+
+    begin{
+    }
+    
+    process{
+        $integer = 0
+        
+    	$computername = ""
+        
+#        if (-not $NotSuperuser -and [int]::TryParse($name,[ref]$integer) -eq $true) {
+#            $computername = "superuser-"
+#
+#            if ($integer -lt 10){
+#                $computername += "0"
+#            }
+#        }
+#
+        
+    	$computername += $name
+        
+#        if ($computername -match 'superuser|is-12|frame|ractfs|racsql'){
+#            $computername = "$computername.ruudlighting.com"
+#        }
+        if (-not $computername.contains(".")){
+            $computername = "$computername.creelighting.com"
+        }
+        $computername
+        $adminString = ""
+        
+        if ($admin)
+        {
+            $adminString = "/admin"
+        }
+    	
+    	mstsc $adminString /v:$computername /f /prompt
+    }
+    end{
+    }
+}
+
+#################################################################################
+
+
+
+
+
+#################################################################################
+
+
+function Out-HtmlFile {
+
+	param
+	(
+		[parameter(mandatory=$true,ValueFromPipeline=$true)] $Output,
+		[parameter(position=0,mandatory=$true,ValueFromPipeline=$false)] $FilePath,
+        [parameter()][validateset('gvim','vim')]$ServerType = "gvim"
+	)
+
+	begin {
+		$data = @()
+
+        if (test-path $filepath){
+            "$filepath already exists"
+            return
+        }
+
+        $null > $filepath
+
+        if (-not (test-path $filepath)){
+            "$filepath could not be created"
+            return
+        }
+
+        clc $filepath -confirm:$false
+
+        $path = convert-path $filepath
+	}
+
+	process {
+		$data += $_
+	}
+
+	end {
+        if ($path){
+            (($data | out-string -width ([int32]::maxvalue)) -split "`r" | % {$_ -replace ' *$'}) -join "`r" | out-string -width ([int32]::maxvalue) | c:\vim\vim82\$servertype.exe -c "silent! %s/^\r/" -c "normal G" -c "silent! %s/\v\r+$/" -c "silent! runtime syntax/2html.vim" -c "w! $path" -c "silent! qa!" -
+        }
+	}
+}
+
+function start-vim(){
+    param(
+        [parameter(valuefrompipeline=$true)]$File = $null,
+        [parameter()][alias('serv','server')]$ServerName = "DEFAULT",
+        [parameter()][validateset('gvim','vim')]$ServerType = "gvim",
+        [switch]$Transparent,
+        [switch]$NoWrap
+    )
+
+    begin{
+        $filesString = ""
+        $stop = $false
+    }
+
+    process{
+
+        if ($stop){
+            return
+        }
+
+        if (-not $file){
+            return
+        }
+
+        if ($file -is [system.io.filesysteminfo]){
+            $file = $file.fullname
+        }
+
+        if ( (test-path $file -pathtype container)){
+            write-output "Directories not supported: $file"
+            $stop = $true
+            return
+        }
+
+        if (-not (test-path $file)){
+
+            $null | set-content $file -errorvariable fileerror -erroraction silentlycontinue
+
+            if ($fileerror){
+                write-output "Failed: $file"
+                $stop = $true
+                return
+            }
+
+            $file = ls $file | select -expand fullname
+            
+        }
+        
+#        if ($file -is [system.io.fileinfo]){
+#            $file = $file.fullname
+#        }
+
+        if ($file -and $file.contains(':')){
+            if ($file -match '(?<drive>^[^:]{0,}:)(?<solidus>\\|/){0,}(?<file>.*$)'){
+                if (-not (test-path $file)){
+                    $null | set-content $file
+                }
+                $file = (convert-path "$($matches.drive)$($matches.solidus)$($matches.file)")
+            }
+        }
+
+        $files = $null
+        if ($file){
+
+            if ($file -is [system.io.fileinfo]){
+                $files = $file
+            }else{
+                if (test-path $file){
+                    $files = ls $file -erroraction silentlycontinue
+                }else{
+                    try{
+                        $files = [system.io.fileinfo]$file
+                    }catch{
+                        #ignore invalid file names
+                    }
+                }
+            }
+
+
+            foreach ($filepath in $files){
+#                if ($filepath.fullname.toupper().startswith('C:\Windows\System32\WindowsPowerShell\v1.0\'.toupper()) -and (-not (convert-path .).toupper().startswith('C:\Windows\System32\WindowsPowerShell\v1.0\'.toupper()))){
+#                    $filesString += ('"' + ($filepath.fullname -replace 'C:\\Windows\\System32\\WindowsPowerShell\\v1.0',(convert-path .)) + '" ')
+#                }else{
+                    $filesString += ('"' + $filepath.fullname + '" ')
+#                }
+            }
+        }
+    }
+
+    end{
+
+        if ($stop){
+            return
+        }
+
+        $Servername = $Servername.toupper()
+
+#        $process = get-process gvim -erroraction silentlycontinue | where {$_.commandline -match "--servername ""$Servername"""} -erroraction silentlycontinue
+        $process = get-process $servertype -erroraction silentlycontinue | where {$_.mainwindowtitle -match " - $Servername`$"} -erroraction silentlycontinue
+
+        if ($process){
+
+            if ($nowrap){
+                $noWrapCommand = '--remote-send ":setlocal nowrap<CR>"'
+            }
+
+
+            if ($filesstring.trim().length -eq 0){
+                $startProcess = (start-process c:\vim\vim82\$servertype.exe -args "--servername ""$Servername"" --remote-send "":enew<CR>"" $nowrapcommand" -windowstyle maximized -passthru -erroraction silentlycontinue -confirm:$false)
+            }else{
+                $startProcess = (start-process c:\vim\vim82\$servertype.exe -args "--servername ""$Servername"" $nowrapcommand --remote-silent $filesstring" -windowstyle maximized -passthru -erroraction silentlycontinue -confirm:$false)
+#                "(start-process c:\vim\vim82\$servertype.exe -args ""--servername ""$Servername"" $nowrapcommand --remote-silent $filesstring"" -windowstyle maximized -passthru -erroraction silentlycontinue -confirm:$false)"
+
+                if ($nowrapcommand){
+                    $startProcess = (start-process c:\vim\vim82\$servertype.exe -args "--servername ""$Servername"" $nowrapcommand " -windowstyle maximized -passthru -erroraction silentlycontinue -confirm:$false)
+                }
+            }
+            $startProcess.commandline
+#            get-processcommandline $startprocess.id
+        }else{
+
+            if ($nowrap){
+                $noWrapCommand = '-c "setlocal nowrap"'
+            }
+            if ($script:vimrcdirectory){
+                $vimRcPathCommand = "-c ""set rtp=$(convert-path $script:vimrcdirectory)\vimfiles | set rtp+=c:\vim\vim82 | source $(convert-path $script:vimrcdirectory)\_vimrc "" "
+            }
+
+            if ($filesstring.trim().length -eq 0){
+                $process = start-process c:\vim\vim82\$servertype.exe -args "$vimrcpathcommand --servername ""$Servername"" $nowrapcommand" -windowstyle maximized -passthru -erroraction silentlycontinue -confirm:$false
+#write-verbose (Get-ProcessCommandLine $process.id)
+            }else{
+#                $process = start-process c:\vim\vim82\gvim.exe -args "--servername ""$Servername"" --remote-silent $filesstring " -windowstyle maximized -passthru -erroraction silentlycontinue
+                $process = start-process c:\vim\vim82\$servertype.exe -args "$vimrcpathcommand --servername ""$Servername"" $nowrapcommand $filesstring" -windowstyle maximized -passthru -erroraction silentlycontinue -confirm:$false
+#write-verbose (Get-ProcessCommandLine $process.id)
+            }
+
+            $process.commandline
+#            get-processcommandline $startprocess.id
+            
+            if ($Transparent){
+                for ($x = 1;$x -le 500; $x++){
+                    $process = get-process -id $process.id -erroraction silentlycontinue
+                    if (-not $process){
+                        break
+                    }
+                    if ($process.MainWindowTitle){
+                        [void]($process | set-windowtransparency)
+                        break
+                    }
+                }
+            }
+        }
+
+#        if ($host.name -eq 'ConsoleHost' -and $host.version.major -lt 6){
+#            add-nativehelpertype
+#            [nativehelper]::bringwindowtofront($process.mainwindowhandle)
+#        }
+         if (test-path function:\show-processwindow){
+#            start-process $bringtofrontexe -args $process.mainwindowhandle -confirm:$false
+            show-processwindow $process.mainwindowhandle
+         }
+
+    }
+}
+
+function ConvertTo-UnixPath{
+    param(
+        [parameter(valuefrompipeline)]$Path
+    )
+    begin{
+    }
+    process{
+        $a = convert-path $path
+        $a = $a -replace '\\','/'
+        $a = $a -replace ' ','\ '
+        $a = $a -replace '\(','\('
+        $a = $a -replace '\)','\)'
+        $a
+    }
+    end{
+    }
+}
+
+function ConvertTo-WslPath{
+    param(
+        [parameter(valuefrompipeline)]$Path
+    )
+    begin{
+    }
+    process{
+        $a = convert-path $path
+        $a = $a -replace '^C:\\users\\nzeleski\\OneDrive - Cree, Inc\\', '~/onedrive/'
+        $a = convertto-unixpath $a
+        $a = $a -replace '^c:', '/mnt/c'
+        $a
+    }
+    end{
+    }
+}
+
+
+function ssh{
+    param(
+        $Destination,
+        $Window = 3
+    )
+
+    process{
+#        write-output "bash.exe --init-file <(printf '. ~/.bashrc;exec ssh $destination'; exit)"
+#        start bash.exe -arg "--init-file <(printf '. ~/.bashrc;exec ssh $destination';exit)" -nonewwindow:$nonewwindow -confirm:$false
+        $sb = [scriptblock]::create("wt -w $window -p tumbleweed wsl.exe ssh $destination")
+        $sb.tostring()
+        $sb.invoke()
+    }
+}
+
+function sftp{
+    param(
+        $Destination,
+        $Window = 3,
+        [parameter()][switch]$AllowDss
+    )
+
+    process{
+        if ($AllowDss){
+            $dss = '-oHostKeyAlgorithms=+ssh-dss'
+        }else{
+            $dss = $null
+        }
+
+#        write-output "bash.exe --init-file <(printf '. ~/.bashrc;exec sftp $dss $destination'; exit)"
+#        start bash.exe -arg "--init-file <(printf '. ~/.bashrc;exec sftp $dss $destination';exit)" -nonewwindow:$nonewwindow -confirm:$false
+        $sb = [scriptblock]::create("wt -w $window -p tumbleweed wsl.exe sftp $dss $destination")
+        $sb.tostring()
+        $sb.invoke()
+    }
+}
+
+function Start-Vd{
+    [cmdletbinding()]
+    param(
+        [parameter(valuefrompipeline)]$Path,
+
+        [parameter()][validateset('arrow', 'arrows', 'csv', 'dot', 'dta', 'eml', 'fixed', 'frictionless', 'geojson', 'hdf5', 'html', 'jira', 'json', 'jsonl', 'lsv', 'mbtiles', 'md', 'mysql', 'npy', 'ods', 'pandas', 'parquet', 'pbf', 'pcap', 'pdf', 'png', 'postgres', 'pyprof', 'rec', 'sas7bdat', 'sav', 'shp', 'spss', 'sqlite', 'tar', 'tsv', 'ttf', 'usv', 'vcf', 'vd', 'vds', 'xls', 'xlsb', 'xlsx', 'xml', 'xpt', 'yaml', 'zip')]$Type,
+        [parameter()]$AdditionalOptions = $null,
+        [parameter()]$Window = 2
+    )
+
+    begin{
+    }
+
+    process{
+#
+#~/.visidatarc
+#
+#globalCommand('gm', 'enable mouse events', 'mm, _ = curses.mousemask(-1); status("mouse "+("ON" if mm else "OFF"))')
+#globalCommand('zm', 'disable mouse events', 'mm, _ = curses.mousemask(0); status("mouse "+("ON" if mm else "OFF"))')
+
+
+        if ($path){
+            $wslpath = $path | convertto-wslpath
+
+            if (-not $type){
+                $type = @('arrow', 'arrows', 'csv', 'dot', 'dta', 'eml', 'fixed', 'frictionless', 'geojson', 'hdf5', 'html', 'jira', 'json', 'jsonl', 'lsv', 'mbtiles', 'md', 'mysql', 'npy', 'ods', 'pandas', 'parquet', 'pbf', 'pcap', 'pdf', 'png', 'postgres', 'pyprof', 'rec', 'sas7bdat', 'sav', 'shp', 'spss', 'sqlite', 'tar', 'tsv', 'ttf', 'usv', 'vcf', 'vd', 'vds', 'xls', 'xlsb', 'xlsx', 'xml', 'xpt', 'yaml', 'zip') | where {$wslpath -match "\.$_$"}
+            }
+
+        }else{
+            $wslpath = $null
+        }
+        if ($type){
+#                start wsl -arg "vd $($path | convertto-wslpath) --filetype $type --clipboard-copy-cmd=clip.exe --use-default-colors" -nonewwindow:$nonewwindow -confirm:$false
+#            start bash.exe -arg "--init-file <(printf '. ~/.bashrc;exec ~/.local/bin/vd $wslpath --filetype $type --clipboard-copy-cmd=clip.exe --use-default-colors --quitguard --undo $($additionaloptions -replace "'","\'")';exit)" -nonewwindow:$nonewwindow -confirm:$false
+
+            $sb = [scriptblock]::create("wt -w $window -p tumbleweed wsl.exe --% ~/.local/bin/vd $wslpath --filetype $type --clipboard-copy-cmd=clip.exe --quitguard --undo $($additionaloptions -replace "'","\'")")
+            $sb.tostring()
+            $sb.invoke()
+#                $command = start -filepath "C:\Users\nzeleski\AppData\Local\Programs\Python\Python39\Scripts\visidata.exe" -arg "$(convert-path $path) --filetype $type --clipboard-copy-cmd=clip.exe --use-default-colors" -nonewwindow:$nonewwindow -confirm:$false
+#                write-output $command
+
+        }else{
+#                start wsl -arg "vd $($path | convertto-wslpath) --clipboard-copy-cmd=clip.exe --use-default-colors" -nonewwindow:$nonewwindow -confirm:$false
+            $sb = [scriptblock]::create("wt -w $window -p tumbleweed wsl.exe ~/.local/bin/vd $wslpath --clipboard-copy-cmd=clip.exe --quitguard--header=0 --undo $($additionaloptions -replace "'","\'")'")
+            $sb.tostring()
+            $sb.invoke()
+#                $command = start -filepath "C:\Users\nzeleski\AppData\Local\Programs\Python\Python39\Scripts\visidata.exe" -arg "$(convert-path $path) --clipboard-copy-cmd=clip.exe --use-default-colors" -nonewwindow:$nonewwindow -confirm:$false
+#                write-output $command
+        }
+    }
+    end{
+    }
+}
+
+function Get-OutVdFile{
+    get-childitem ([system.io.path]::gettemppath() + "out-vd.*") 
+}
+
+function Read-OutVdFile{
+    [CmdletBinding()] 
+    param( 
+    )
+
+    dynamicparam {
+        $dynamicparams =
+            new-dynamicparameter -mandatory -position 0 -Type string -Name File -validateset (get-childitem ([system.io.path]::gettemppath() + "out-vd.*") | select -expand name ) |
+            new-dynamicparameter -position 1 -Type switch -Name View 
+
+        $dynamicparams.parameterdictionary
+        $psboundparameters = Set-DynamicParameterValues $psboundparameters $dynamicparams
+    }
+    
+    begin{
+    }
+
+
+    process{
+        set-dynamicparametervariables $psboundparameters
+        if (-not $view){
+             start-vd ([system.io.path]::gettemppath() + $file)
+        }else{
+            get-content ([system.io.path]::gettemppath() + $file) 
+        }
+    }
+
+    end{
+    }
+}
+
+function out-vd{
+    [cmdletbinding()]
+    param(
+        [parameter(valuefrompipeline)]$Data,
+
+        [validateset('arrow', 'arrows', 'csv', 'dot', 'dta', 'eml', 'fixed', 'frictionless', 'geojson', 'hdf5', 'html', 'jira', 'json', 'jsonl', 'lsv', 'mbtiles', 'md', 'mysql', 'npy', 'ods', 'pandas', 'parquet', 'pbf', 'pcap', 'pdf', 'png', 'postgres', 'pyprof', 'rec', 'sas7bdat', 'sav', 'shp', 'spss', 'sqlite', 'tar', 'tsv', 'ttf', 'usv', 'vcf', 'vd', 'vds', 'xls', 'xlsb', 'xlsx', 'xml', 'xpt', 'yaml', 'zip')]
+        [parameter(mandatory,position=0)]$Type = 'csv',
+
+        [parameter(position=1)]$Window = 3,
+
+        [switch]$NoConversion,
+        [switch]$AsByteStream
+    )
+
+    begin{
+        $alldata = [system.collections.generic.list[object]]::new()
+        $isXmlType = $false
+    }
+
+    process{
+#        if ($data -is [System.Xml.XmlElement]){
+#            $isXmlType = $true
+#        }
+        $alldata.add($data)
+    }
+    end{
+
+
+        #clean up tmp files from before today
+        if (-not $nopurge){
+            $files = get-childitem "$([System.IO.Path]::GetTempPath())out-vd.*.*" -erroraction silentlycontinue 
+
+            $files | where {$_.lastwritetime.date -lt (get-date).date} | remove-item -confirm:$false
+        }
+
+        $files = get-childitem "$([System.IO.Path]::GetTempPath())out-vd.*.*" -erroraction silentlycontinue | select -expand name | select-string '(?<=^out-vd\.)[^\.]{1,}' | select -expand matches | select -expand value
+
+        if (-not $files){
+            $number = 0
+        }else{
+            $number = $files | measure -max | select -expand maximum
+        }
+
+        $number += 1
+
+        $tmpfile = [System.IO.Path]::GetTempPath() + "out-vd.$number.$type"
+
+        $exported = $false
+        if (-not $asbytestream -and -not $noconversion){
+            switch ($type){
+                
+                'xml' {
+#                    if ($isxmltype){
+                        "<vd-root>$($alldata.outerxml)</vd-root>" | set-content $tmpfile -confirm:$false
+                        $exported = $true
+                        break
+#                    }
+                }
+
+                default {
+                    $alldata | export-csv $tmpfile -confirm:$false
+                    $exported = $true
+                    break
+                }
+            }
+        }
+
+        if (-not $exported){
+            $alldata | set-content $tmpfile -asbytestream:$asbytestream -confirm:$false
+        }
+
+#        $outdata|out-string -width ([int]::maxvalue) | wsl vd --filetype $type
+         start-vd -path $tmpfile -type $type -window $window
+    }
+}
+
+function Get-OutVimFile{
+    get-childitem ([system.io.path]::gettemppath() + "out-vim.*") 
+}
+
+function Read-OutVimFile{
+    [CmdletBinding()] 
+    param( 
+    )
+
+    dynamicparam {
+        $dynamicparams =
+            new-dynamicparameter -mandatory -position 0 -Type string -Name File -validateset (get-childitem ([system.io.path]::gettemppath() + "out-vim.*") | select -expand name ) |
+            new-dynamicparameter -position 1 -Type string -Name ServerName -default 'OV' |
+            new-dynamicparameter -position 2 -Type switch -Name View 
+
+        $dynamicparams.parameterdictionary
+        $psboundparameters = Set-DynamicParameterValues $psboundparameters $dynamicparams
+    }
+    
+    begin{
+    }
+
+
+    process{
+        set-dynamicparametervariables $psboundparameters
+        if (-not $view){
+            start-vim ([system.io.path]::gettemppath() + $file) -servername $servername
+        }else{
+            get-content ([system.io.path]::gettemppath() + $file) 
+        }
+    }
+
+    end{
+    }
+}
+
+
+function Out-Vim{
+    [CmdletBinding(DefaultParameterSetName='Input')]
+
+	param(
+		[parameter(parametersetname='Input',mandatory=$false,ValueFromPipeline=$true)] $Input,
+		[parameter(parametersetname='Input',position=1,mandatory=$false,ValueFromPipeline=$false)] $SyntaxFileExtension="tmp",
+		[parameter(parametersetname='Input',position=2,mandatory=$false,ValueFromPipeline=$false)] $ServerName="OV",
+		[parameter(parametersetname='Input')][ValidateSet('ASCII','Default','UTF32','UTF8','BigEndianUnicode','Unicode','UTF7')]$Encoding = 'UTF8',
+		[parameter(parametersetname='Input')][switch]$NoPurge
+
+	)
+
+	begin{
+		$data = @()
+		$vimoptions = ""
+	}
+
+	process{
+		$data += $input
+	}
+
+	end{
+
+        if(-not $data){
+            return
+        }
+        
+        $output = (($data | out-string -width ([int32]::maxvalue)) -split "`r" | % {$_ -replace ' *$'}) -join "`r" | out-string -width ([int32]::maxvalue) 
+#        $output|format-hex
+        $output = $output -replace "`r`n`r`n$"
+        $output = $output -replace "`r{2,}","`r"
+#        $output|format-hex
+
+        #clean up tmp files from before today
+        if (-not $nopurge){
+            $files = get-childitem "$([System.IO.Path]::GetTempPath())out-vim.*.*" -erroraction silentlycontinue 
+
+            $files | where {$_.lastwritetime.date -lt (get-date).date} | remove-item -confirm:$false
+        }
+
+        #figure out new tmp file number
+        $files = get-childitem "$([System.IO.Path]::GetTempPath())out-vim.*.*" -erroraction silentlycontinue | select -expand name | select-string '(?<=^out-vim\.)[^\.]{1,}' | select -expand matches | select -expand value
+
+        if (-not $files){
+            $number = 0
+        }else{
+            $number = $files | measure -max | select -expand maximum
+        }
+
+        $number += 1
+
+        $tmpfile = [System.IO.Path]::GetTempPath() + "out-vim.$number.$syntaxfileextension"
+
+        #move data to tmp file
+#        $output | set-content $tmpfile -encoding unknown -confirm:$false
+        
+        switch ($encoding){
+            'ASCII'{$fileencoding = [text.encoding]::ASCII;break}
+            'Default'{$fileencoding = [text.encoding]::Default;break}
+            'UTF32'{$fileencoding = [text.encoding]::UTF32;break}
+            'UTF8'{$fileencoding = [text.encoding]::UTF8;break}
+            'BigEndianUnicode'{$fileencoding = [text.encoding]::BigEndianUnicode;break}
+            'Unicode'{$fileencoding = [text.encoding]::Unicode;break}
+            'UTF7'{$fileencoding = [text.encoding]::UTF7;break}
+        }
+        [System.IO.File]::writealltext($tmpfile,$output,$fileencoding)
+
+        #start vim
+        write-output $tmpfile
+        start-vim -file $tmpfile -Servername $Servername
+
+#        (($data | out-string -width ([int32]::maxvalue)) -split "`r" | % {$_ -replace ' *$'}) -join "`r" | out-string -width ([int32]::maxvalue) | c:\vim\vim82\gvim.exe -c "silent! %s/^\r/" -c "normal G" -c "silent! %s/\v\r+$/" -c "1" -c "setlocal nomodifiable" -c "call setbufvar(1,'&mod',0)" -R -
+	
+    }
+}
+
+
+function start-tfvimdiff{
+
+    param(
+        #empty - all params in $args array will be expected to be files
+        [switch]$RawInput,
+        [switch]$FlOss,
+        [switch]$CsvOss,
+        [switch]$Sort,
+        [switch]$IgnoreCase
+    )
+
+    $files = @()
+
+#    remove-item "$([system.io.path]::gettemppath())*__vdif__" -confirm:$false
+     get-childitem "$([system.io.path]::gettemppath())*__vdif__" | where creationtime -lt ([datetime]::now.Adddays(-7)) | remove-item -confirm:$false
+
+    $params = $args
+    if ($args.count -eq 1 -and $args[0] -is [array]){
+        $params = $args[0]
+    }
+
+    foreach ($file in $params){
+        if ($rawinput){
+
+            $tmpfilename = "$([system.io.path]::GetTempFileName())__vdif__" 
+            $string = $file
+            if ($flOss){
+                $string = $string | format-list | out-string -stream
+            }
+            if ($csvoss){
+                $string = $string | convertto-csv | out-string -stream
+            }
+
+            if ($sort){
+                $string = $string | sort
+            }
+
+            
+            $tmpfile = $string | set-content -path $tmpfilename -confirm:$false 
+            $files += convert-path $tmpfilename
+
+
+        }else{
+
+            if (-not (test-path $file)){
+                write-error "file not found: $file"
+                return
+            }
+
+            $files += convert-path $file
+        }
+
+    }
+
+#    if ($files.count -eq 1){
+#        $file = $files[0]
+#
+##        $serverPath = tf workfold .\CREE_QP_PRICING_FREIGHT.pkb | grep '\$[^:]{0,}' | select -expand matches | select -expand value
+#
+#        $serverFileContents = (tf view $file /console) -join [environment]::newline
+#        $syntaxfileextension = (ls $file).extension -replace '^\.'
+#        $serverfilecontents | c:\vim\vim82\gvim.exe -R - -c """:set nomodifiable | call setbufvar(1,'&mod',0) | file tfs | vnew $($file -replace ' ','\ ') | let tfs_filetype=&filetype | bp | let &filetype = tfs_filetype | bn | windo diffthis | set diffopt+=iwhite""" 
+#    }else{
+#
+#        $command = 'c:\vim\vim82\gvim.exe -d '
+#        foreach ($file in $files){
+#            $command += """$($file -replace ' ','\ ')"" "
+#        }
+#
+#        $command +=  "-c 'set diffopt+=iwhite'"
+#        $command
+#        [scriptblock]::create($command).invoke()
+#    }
+
+    if ($files.count -eq 1 -and -not $rawInput){
+        $file = $files[0]
+        $tf = (tf view $file /console) -join [environment]::newline
+
+        $tmpfilename = "$([system.io.path]::GetTempFileName())__vdif__" 
+
+        $tmpfile = $tf | set-content -path $tmpfilename -confirm:$false 
+        $files = @((convert-path $tmpfilename),$file)
+    }
+
+    $servertype = 'gvim'
+
+    $command = "c:\vim\vim82\$servertype.exe -d "
+    foreach ($file in $files){
+        $command += """$($file -replace ' ','\ ')"" "
+    }
+
+    $command +=  "-c 'set diffopt+=iwhite' "
+    if ($ignorecase){
+        $command +=  "-c 'set diffopt+=icase' "
+    }
+
+    if ($script:vimrcdirectory){
+        $command += "-c ""set rtp=$(convert-path $script:vimrcdirectory)\vimfiles | set rtp+=c:\vim\vim82 | source $(convert-path $script:vimrcdirectory)\_vimrc "" "
+    }
+
+    $command
+    [scriptblock]::create($command).invoke()
+}
+
+function start-tfdiff(){
+    [CmdletBinding(DefaultParameterSetName='tfs')]
+    param(
+        [parameter(parametersetname='local')][switch]$local,
+        [parameter(parametersetname='local',position=0,mandatory=$true,ValueFromPipeline=$false)][validatescript({ test-path $_ -pathtype leaf})] [string]$File1,
+        [parameter(parametersetname='local',position=1,mandatory=$true,ValueFromPipeline=$false)][validatescript({ test-path $_ -pathtype leaf})] [string]$File2,
+        [parameter(parametersetname='tfs',position=0,mandatory=$true,ValueFromPipeline=$false)][validatescript({ test-path $_ -pathtype leaf})] [string]$File
+    )
+
+    if ($local){
+        start-process -filepath 'C:\Program Files (x86)\Microsoft Visual Studio 10.0\Common7\IDE\tf.exe' -argumentlist @('diff',$file1,$file2,"/ignorespace") -windowstyle hidden
+    }else{
+        start-process -filepath 'C:\Program Files (x86)\Microsoft Visual Studio 10.0\Common7\IDE\tf.exe' -argumentlist @('diff',$file,"/ignorespace") -windowstyle hidden
+    }
+
+
+
+}
+
+
+
+
+#search history. default to previous command
+function Get-BufferHistory{
+    [CmdletBinding()] 
+    param( 
+		[switch] $Full
+    )
+
+    begin{}
+    process{
+        # Check the host name and exit if the host is not the Windows PowerShell console host.
+        if ($host.Name -ne 'ConsoleHost') { 
+          write-host -ForegroundColor Red "This script runs only in the console host. You cannot run this script in $($host.Name)." 
+          exit -1 
+        } 
+
+        # Grab the console screen buffer contents using the Host console API. 
+        $bufferWidth = $host.ui.rawui.BufferSize.Width 
+        $bufferHeight = $host.ui.rawui.CursorPosition.Y 
+        $rec = new-object System.Management.Automation.Host.Rectangle 0,0,($bufferWidth - 1),$bufferHeight 
+        $buffer = $host.ui.rawui.GetBufferContents($rec) 
+        $lines = @()
+
+        # Iterate through the lines in the console buffer. 
+        for($i = 0; $i -lt $bufferHeight - 1; $i++) { 
+            $textBuilder = new-object system.text.stringbuilder 
+
+
+            for($j = 0; $j -lt $bufferWidth; $j++) { 
+                $cell = $buffer[$i,$j] 
+                $null = $textBuilder.Append($cell.Character) 
+            } 
+
+            $isPrompt = $textBuilder.ToString().trim() -match '^\d\d:\d\d:\d\d nzeleski@'
+
+            if ($isPrompt -and (-not $full)){
+                if ($textBuilder.ToString().trim() -match 'gbh|get-bufferhistory'){
+                    $skip = $true
+                }else{
+                    $skip = $false
+                }
+            }
+
+            if (-not $skip){
+                $lines += $textBuilder.ToString().trim()
+
+                if ($isPrompt){
+                    $lastPrompt = $lines.count - 1
+                }
+            }
+
+        } 
+
+        if ($Full){
+            $lines
+        }else{
+            $lastPrompt .. ($lines.count - 1) | % {$lines[$_]}
+        }
+    }
+    end{}
+}
+
+function Get-OutlookEmail{
+
+    [outputtype('NZ.EmailRecord')]
+
+    param(
+        [parameter(mandatory=$true,ValueFromPipeline=$false)][validateset('nick.zeleski@creelighting.com','Legacy Error')]$Mailbox = 'nick.zeleski@creelighting.com',
+        [parameter(mandatory=$false,ValueFromPipeline=$false)] $SubjectRegex = $null,
+        [parameter(mandatory=$false,ValueFromPipeline=$false)] $BodyRegex = $null,
+        [parameter(mandatory=$false,ValueFromPipeline=$false)] $AttachmentRegex = $null,
+        [parameter(mandatory=$false,ValueFromPipeline=$false)] $EntryId = $null,
+        [parameter(mandatory=$false,ValueFromPipeline=$false)] $FromRegex = $null,
+        [parameter(mandatory=$false,ValueFromPipeline=$false)] $ToRegex = $null,
+        [parameter(mandatory=$false,ValueFromPipeline=$false)] $StartDate = (get-date).date.adddays(-90),
+        [parameter(mandatory=$false,ValueFromPipeline=$false)] $EndDate = $null,
+        [switch]$Sent,
+        [switch]$IncludeBody,
+        [switch]$HideProgress
+
+    )
+
+
+    $outlook = New-Object -ComObject Outlook.Application
+
+    # Ensure we are logged into a session
+    $session = $outlook.Session
+    $session.Logon()
+
+    if ($EntryId){
+        $emails = @($session.getitemfromid($entryid))
+    }else{
+
+        $basefolder = $session.folders.item($mailbox)
+
+
+        if ($sent){
+            $basefolder = $basefolder.folders.item("Sent Items")
+        }else{
+            $basefolder = $basefolder.folders.item("Inbox")
+        }
+
+        $folders = @($basefolder)
+
+        foreach ($folder in $basefolder.folders){
+            $folders += $folder
+        }
+
+        $allemails = @()
+
+        foreach ($folder in $folders){
+            $emails = $folder.items
+
+            if ($EndDate -or $StartDate){
+
+                $filter = $null
+
+                if ($StartDate -and -not $EndDate){
+                    $filter = "[SentOn] >= '$(([datetime]$StartDate).tostring("MM/dd/yyyy HH:mm"))'"
+                }elseif($endDate -and -not $StartDate){
+                    $filter = "[SentOn] < '$(([datetime]$EndDate).tostring("MM/dd/yyyy HH:mm"))'"
+                }else{
+                    $filter = "[SentOn] < '$(([datetime]$EndDate).tostring("MM/dd/yyyy HH:mm"))' AND [SentOn] >= '$(([datetime]$StartDate).tostring("MM/dd/yyyy HH:mm"))'"
+                }
+
+                write-debug $filter
+                $emails = $emails.restrict($filter)
+            }
+
+            $allemails += $emails
+        }
+
+
+#        $allemails.sort("[SentOn]",$true)
+    }
+
+    $count = 0
+    $total = $allemails.count
+    $matchedcount = 0
+    $output = @()
+
+    foreach ($email in $allemails){
+        if ($Host.UI.RawUI.KeyAvailable -and ($Host.UI.RawUI.ReadKey("IncludeKeyUp,NoEcho").VirtualKeyCode -eq 27 )){
+            break
+        }
+
+        if (-not $hideprogress){
+            $count++;
+            $progress = $count/$total*100;
+            Write-Progress -Activity "Searching in $($email.parent.folderpath)...  Matches found: $matchedcount" -PercentComplete  $progress -Status ("$($progress.tostring("n"))%   Current email SentOn: $(if ($email.senton){$email.senton.tostring("MM/dd/yyy HH:mm:ss")})") 
+        }
+
+
+        if ($fromregex -and $email.sender.name -notmatch $fromRegex){
+            continue
+        }
+
+        if ($toregex){
+            if ( ( -not $email.recipients -or $email.recipients.count -eq 0 -or ( $email.recipients -and [string]::join("; ",($email.recipients | % {$_|select -expand name})) -notmatch $toRegex)) -and $email.receivedbyname -notmatch $toRegex -and $email.cc -notmatch $toRegex){
+                continue
+            }
+
+        }
+
+        
+
+        if ($subjectregex -and $email.subject -notmatch $subjectregex){
+            continue
+        } 
+
+        if ($bodyregex -and $email.body -notmatch $Bodyregex){
+            continue
+        } 
+
+        if ($email.attachments){
+            $attachments = foreach ($attachment in $email.attachments){
+                if ($attachment.filename){
+                    $attachment.filename
+                }
+            } 
+            
+            $attachments = $attachments -join '; '
+
+            
+        }else{
+            $attachments = ""
+        }
+
+        if ($attachmentregex -and $attachments -notmatch $attachmentregex){
+            continue
+        } 
+
+
+        $matchedcount++
+#        $output += $email | select entryid,@{name='When';ex={$_.senton}},subject,@{name='From';ex={[string]::join("; ",($_.sender | % {$_|select -expand name}))}}, @{name='To';ex={if (($_.recipients | % {$_|select -expand name}) -ne $null){[string]::join("; ",($_.recipients | % {$_|select -expand name}))}else{$_.receivedbyname}}},Cc,@{name='Matches';ex={(($_.body -split "`n" )| select-string $Bodyregex -allmatches )}},@{name='Body';ex={if ($includebody){$_.body}}},@{name='Attachments';ex={$attachments}}
+
+        if (($_.recipients | % {$_|select -expand name}) -ne $null){
+            $to = [string]::join("; ",($_.recipients | % {$_|select -expand name}))
+        }else{
+            $to = $_.receivedbyname
+        }
+
+        if (($_.Cc | % {$_|select -expand name}) -ne $null){
+            $cc = [string]::join("; ",($_.Cc | % {$_|select -expand name}))
+        }else{
+            $cc = $null
+        }
+
+        $new = [pscustomobject]@{
+            EntryId = $email.entryid
+            SentOn = $email.senton
+            From = [string]::join("; ",($email.sender | % {$_|select -expand name}))
+            To = $to
+            Cc = $cc
+            Body = $email.body
+            Attachments = $attachments
+        }
+
+        $new.psobject.typenames.insert(0,'NZ.EmailRecord')
+
+        $output += $new
+
+    }
+
+    $output | sort senton -desc
+
+}
+
+
+filter ConvertTo-String 
+{ 
+<# 
+.SYNOPSIS 
+ 
+Converts the bytes of a file to a string. 
+ 
+.DESCRIPTION 
+ 
+ConvertTo-String converts the bytes of a file to a string that has a 
+1-to-1 mapping back to the file's original bytes. ConvertTo-String is 
+useful for performing binary regular expressions. 
+ 
+.PARAMETER Path 
+ 
+Specifies the path to a file. 
+ 
+.EXAMPLE 
+ 
+PS C:\>$BinaryString = ConvertTo-String C:\Windows\SysWow64\kernel32.dll 
+PS C:\>$HotpatchableRegex = [Regex] '[\xCC\x90]{5}\x8B\xFF' 
+PS C:\>$HotpatchableRegex.Matches($BinaryString) 
+ 
+Description 
+----------- 
+Converts kernel32.dll into a string. A binary regular expression is 
+then performed on the string searching for a hotpatchable code 
+sequence - i.e. 5 nop/int3 followed by a mov edi, edi instruction. 
+#> 
+ 
+    [OutputType([String])] 
+    Param ( 
+        [Parameter( Mandatory = $True, 
+                    Position = 0, 
+                    ValueFromPipeline = $True )] 
+        [ValidateScript( { -not (Test-Path $_ -PathType Container) } )] 
+        [String] 
+        $Path 
+    ) 
+ 
+    $Stream = New-Object IO.FileStream -ArgumentList (Resolve-Path $Path), 'Open', 'Read' 
+ 
+    # Note: Codepage 28591 returns a 1-to-1 char to byte mapping 
+    $Encoding = [Text.Encoding]::GetEncoding(28591) 
+     
+    $StreamReader = New-Object IO.StreamReader -ArgumentList $Stream, $Encoding 
+ 
+    $BinaryText = $StreamReader.ReadToEnd() 
+ 
+    $StreamReader.Close() 
+    $Stream.Close() 
+ 
+    Write-Output $BinaryText 
+}
+#################################################################################
+function Format-Xml() { 
+    [CmdletBinding()]
+	param(
+		[parameter(parametersetname='xml',mandatory,ValueFromPipeline)] [xml]$xml,
+		[parameter(parametersetname='xmlstring',mandatory,ValueFromPipeline)] [string]$xmlstring,
+		[parameter(mandatory=$false,ValueFromPipeline=$false)] $indent = 4,
+        [switch]$Raw
+	)
+
+	begin {
+		$StringWriter = New-Object System.IO.StringWriter 
+		$XmlWriter = New-Object System.XMl.XmlTextWriter $StringWriter 
+		$xmlWriter.Formatting = "indented" 
+		$xmlWriter.Indentation = $indent 
+        $rawoutput = [system.text.stringbuilder]::new()
+	}
+
+	process {
+        if ($xmlstring){
+#            if ($xmlstring.trim() -notmatch '^\<\?xml'){
+#                $xmlstring = "$('<?xml version="1.0" encoding="UTF-8"?>')$xmlstring)"
+#            }
+            $xml = [xml]$xmlstring
+        }
+        $nodes = $xml.SelectNodes("//*[count(@*) = 0 and count(child::*) = 0 and not(string-length(text())) > 0]")
+        $nodes | % {$_.isempty=$true}
+		$xml.WriteContentTo($XmlWriter) 
+		$XmlWriter.Flush() 
+		$StringWriter.Flush() 
+		$lines =  ((($StringWriter.ToString()) -split '\r\n') -split '\n')
+        foreach($line in $lines){
+            if ($raw){
+                $null = $rawoutput.appendline($line)
+            }else{
+                write-output $line
+            }
+        }
+	}
+	end
+	{
+        if ($raw){
+            $rawoutput.tostring()
+        }
+	}
+}
+#################################################################################
+
+
+#################################################################################
+
+
+
+function Read-NetShareUsingLinuxMount{
+    param(
+        $FilePath,
+        $TmpMntPath = '/mnt/tmpmount',
+        [switch]$Raw
+    )
+    begin{
+    }
+    process{
+        if ($psversiontable.platform -ne 'unix'){
+            throw "function is not valid for windows platform"
+        }
+        $dir = split-path $filepath
+        $dir = $dir -replace '/','\'
+
+        $file = split-path $filepath -leaf
+        $file = "$tmpmntpath/$file"
+
+        [scriptblock]::create("sudo mount -t drvfs '$dir' $tmpmntpath").invoke()
+        get-content $file -raw:$raw
+        sudo umount $tmpmntpath
+        
+    }
+    end{
+    }
+}
+
+function Get-OracleConnectionInfo{
+
+    [outputtype('NZ.OracleConnectionInfo')]
+    param(
+        [parameter(position=0,mandatory=$false,ValueFromPipeline=$false)] $TnsNameRegex = "[^\s()]",
+        [parameter(position=1,mandatory=$false,ValueFromPipeline=$false)] $TnsFile = "onedrive:/oracle/OracleTns/tnsnames.ora",
+        [switch]$NoLowerCase,
+        [switch]$ShowTnsNamesFile,
+        [switch]$All
+    )
+
+    #   IFILE=//racwdc01/creedrives/global/oracletns/tnsnames.ora
+    $file = cat $tnsfile | where {$_ -notmatch '^\s*#'} |  grep '(?<=ifile=)(?<link>.*)' | select -expand matches | select -expand value
+    if (-not $file){
+        write-error "could not determine file to read"
+        return
+    }
+    if ($showtnsnamesfile){
+        $file
+        return
+    }
+
+    if ($psversiontable.platform -eq 'unix'){
+        if (-not (test-path $file)){
+            $filecontents = read-netshareusinglinuxmount $file /mnt/tmpmount
+
+            if (-not $filecontents){
+                write-error "Could not determine file to read"
+                return
+            }
+        }
+    }else{
+        if (-not (test-path $file)){
+            write-error "Could not determine file to read"
+            return
+        }
+        $filecontents = get-content $file
+    }
+
+
+    #get tns strings
+    $tnswip = [system.text.stringbuilder]::new()
+    $tnsstrings = [system.collections.generic.list[string]]::new()
+
+    foreach($line in $filecontents){
+
+        $thisline = $line.trim() -replace '#.*'
+        
+        if ($thisline.length -eq 0){
+            continue
+        }
+
+        if ($tnswip.length -eq 0){
+            $new = $true
+        }else{
+            $new = $false
+        }
+
+        $null = $tnswip.append($thisline)
+
+        if (-not $new){
+            $open = ($tnswip.tostring() -replace '[^\(]').length
+            $closed = ($tnswip.tostring() -replace '[^\)]').length
+
+            if ($open -eq $closed){
+                $tnsstrings.add($tnswip.tostring())
+                $null = $tnswip.clear()
+            }
+        }
+    }
+
+    foreach ($tnsstring in $tnsstrings){
+        $tnsname = $tnsstring | select-string "^[^=\s]+" | select -expand matches | select -expand value
+        if ($tnsname -notmatch $tnsnameregex){
+            continue
+        }
+        $new = [PSCustomObject]@{
+            TnsName = $tnsname
+            Host = $tnsstring | select-string -allmatches "(?<=host\s*=\s*)[^\)\s]+" | select -expand matches | select -expand value
+            Port = $tnsstring | select-string -allmatches "(?<=port\s*=\s*)[^\)\s]+" | select -expand matches | select -expand value
+            ServiceName = $tnsstring | select-string -allmatches "(?<=service_name\s*=\s*)[^\)\s]+" | select -expand matches | select -expand value
+            Sid = $tnsstring | select-string -allmatches "(?<=sid\s*=\s*)[^\)\s]+" | select -expand matches | select -expand value
+            TnsString = $tnsstring -replace '^[^\(]+|\s' 
+        }
+        if (-not $nolowercase){
+            $new.TnsName = $new.TnsName.ToLower()
+            $new.Host = $new.Host.ToLower()
+            $new.Port = $new.Port.ToLower()
+            $new.ServiceName = if ($new.ServiceName){$new.servicename.ToLower()}else{$null}
+            $new.Sid = if ($new.sid){$new.sid.ToLower()}else{$null}
+            $new.TnsString = $new.TnsString.tolower()
+        }
+
+        if (-not $all){
+            $new = $new | where host -match 'oraclevcn'
+        }
+        $new
+    }
+
+
+#    $matched = $filecontents -replace '#.*\r|^\S{0,}\r' | select-string "(?ms)^(?<name>$tnsnameregex\S{0,})=?.*?host\s{0,}=\s{0,}(?<host>[^\)]+).*?port\s{0,}=\s{0,}(?<port>[^\)]+).*?(sid|service_name)\s{0,}=\s{0,}(?<sid>[^\)]+)" -allmatches
+#
+#    $allresults = @()
+#
+#    foreach ($match in $matched.matches){
+#        $match.value -match "(?ms)^(?<name>$tnsnameregex\S{0,})=?.*?host\s{0,}=\s{0,}(?<host>[^\)]+).*?port\s{0,}=\s{0,}(?<port>[^\)]+).*?(?<type>sid|service_name)\s{0,}=\s{0,}(?<serviceOrSid>[^\)]+)" | out-null
+#
+##        $new = new-object PSCustomObject
+##        $new | add-member -membertype NoteProperty -name "TnsName" -value $matches.name
+##        $new | add-member -membertype NoteProperty -name "Host" -value $matches.host
+##        $new | add-member -membertype NoteProperty -name "Port" -value $matches.port
+##        $new | add-member -membertype NoteProperty -name "ServiceName" -value $matches.sid
+##
+#        $new = [PSCustomObject]@{
+#            TnsName = $matches.name
+#            Host = $matches.host
+#            Port = $matches.port
+#            ServiceName = if ($matches.type -eq 'service_name'){$matches.serviceorsid}else{$null}
+#            Sid = if ($matches.type -eq 'sid'){$matches.serviceorsid}else{$null}
+#        }
+#
+#        if (-not $nolowercase){
+#            $new.TnsName = $new.TnsName.ToLower()
+#            $new.Host = $new.Host.ToLower()
+#            $new.Port = $new.Port.ToLower()
+#            $new.ServiceName = if ($new.ServiceName){$new.servicename.ToLower()}else{$null}
+#            $new.Sid = if ($new.sid){$new.sid.ToLower()}else{$null}
+#        }
+#
+#
+#        $allresults += $new
+#        
+#    }
+#    $allresults
+}
+
+
+
+
+
+#################################################################################################
+
+if (-not ([System.Management.Automation.PSTypeName]'MyAsyncTest').Type) {
+    add-type -typedefinition  @'
+    using System.Threading.Tasks; 
+    using System.Collections.Generic; 
+    using System.Diagnostics; 
+
+    public class MyAsyncTest{
+
+        static string Wait(int seconds,int divideBy){
+            System.Threading.Thread.Sleep(seconds * 1000 / divideBy);
+            return seconds.ToString();
+        }
+
+        static async Task<string> WaitAsync(int seconds,int divideBy){
+            return await Task.Run(() => Wait(seconds,divideBy));
+        }
+
+        // Three things to note in the signature:
+        //  - The method has an async modifier.
+        //  - The return type is Task or Task<T>. (See "Return Types" section.)
+        //    Here, it is Task<string> because the return statement returns an string.
+        //  - The method name ends in "Async."
+        //public static async Task<string> GoAsync(){
+        public static async Task<string[]> GoAsync(bool forceError = false){
+
+            List<Task<string>> tasks = new List<Task<string>>();
+            tasks.Add(WaitAsync(3,1));
+            tasks.Add(WaitAsync(1,1));
+            tasks.Add(WaitAsync(5,1));
+            tasks.Add(WaitAsync(2,1));
+
+            if (forceError){
+                tasks.Add(WaitAsync(2,0));
+            }
+
+
+            List<string> results = new List<string>();
+
+            try{
+                await Task.WhenAll(tasks).ConfigureAwait(false); //https://msdn.microsoft.com/en-us/magazine/jj991977.aspx
+
+            //if not caught, then the task will return to client in faulted state
+            }catch(System.Exception ex){
+
+                //foreach(Task task in tasks) {
+                    //if (task.IsFaulted){
+                        //results.Add(ex.ToString());
+                    //}
+                //}
+
+                Debug.WriteLine("task error: " + ex);
+            }
+
+            foreach(Task<string> task in tasks){
+                if (!task.IsFaulted){
+                    results.Add(task.Result);
+                }else{
+                    results.Add(task.Exception.InnerException.Message);
+                }
+            }
+
+            return await Task.Run(() => {return results.ToArray();});
+        }
+    }
+'@
+}
+
+function Test-AsyncMethod{
+    param(
+        [string]$waitmessage = 'waiting...'
+    )
+
+    $cursorPosition = $host.ui.rawui.cursorPosition
+
+
+    $start = get-date
+
+    $task = [myasynctest]::goasync()
+
+    $completed = show-Asyncwaitmessage $waitmessage task @('iscompleted') 
+
+    $end = (new-timespan $start (get-date))
+
+    if ($completed){
+        "done in $($end.totalseconds) seconds"
+    }else{
+        "cancelled after $($end.totalseconds) seconds"
+    }
+
+}
+
+function Show-AsyncWaitMessage{
+
+    param(
+        [parameter(position=0,mandatory=$false,ValueFromPipeline=$true)][string]$Message = "Waiting",
+        [parameter(position=1,mandatory=$true,ValueFromPipeline=$false)][string]$ConditionVariablename,
+        [parameter(position=2,mandatory=$false,ValueFromPipeline=$false)][string[]]$ConditionMethodPropertyChain = @(),
+        [parameter(position=3,mandatory=$false,ValueFromPipeline=$false)][object]$ConditionMatch = $true
+    )
+
+    $start = get-date
+    $check = $start
+
+
+    if ($host.name -eq 'consolehost'){
+        $setControlC = $true
+        $controlCSave = [console]::treatcontrolcasinput
+    }else{
+        $setControlC = $false
+    }
+
+    if ($setcontrolc){
+        [console]::TreatControlCAsInput = $true
+    }
+
+    $completed = $true
+    $progressbarcounter = 0
+
+    $lasttimespancheck = (new-timespan $check (get-date))
+
+    if ($host.name -eq 'consolehost'){
+
+        $messageArray = ($message -split "`r`n") -split "`n"
+        $messageOutput = ""
+        
+        for ($x=0;$x -lt $messagearray.count -and $x -lt 12;$x++){
+            if ($x -eq 11){
+                $messageoutput += "..."
+                break
+            }
+
+            if ($messagearray[$x].trimend().length -gt ($host.ui.rawui.buffersize.width - 4)){
+                $messageoutput += $messagearray[$x].trimend().substring(0, ($host.ui.rawui.buffersize.width - 4 - 3)) + "..."
+            }else{
+                $messageoutput += ($messagearray[$x].trimend() + (" " * ($host.ui.rawui.buffersize.width - $messagearray[$x].trimend().length - 4)))
+            }
+        }
+    }else{
+        $messageoutput = $message
+    }
+
+    while ($true){
+
+        if ($setcontrolc -and [console]::KeyAvailable) {
+            $key = [system.console]::readkey($true)
+            if (($key.modifiers -band [consolemodifiers]"control") -and ($key.key -eq "C")) {
+                $completed = $false
+                break
+            }
+        }
+
+        #get the scope of the variable based on whether it was called from this module or not
+        if ((get-pscallstack)[1].scriptname -eq (get-pscallstack)[0].scriptname){
+            $variablescope = 1
+        }else{
+            $variablescope = 2
+        }
+        
+        #get the variable from the appropriate scope
+        $checkVar = (get-variable -name $conditionVariablename -scope $variablescope).value
+
+        #build the variable's property and method naming
+        foreach ($methodproperty in $conditionmethodpropertychain){
+            if ($methodproperty.trim() -match '^(?<name>[^(]{1,})(?<method>\(\)$){0,1}'){
+                if ($matches.method){
+                    $checkvar = $checkvar."$methodproperty"()
+                }else{
+                    $checkvar = $checkvar."$methodproperty"
+                }
+            }else{
+                throw 'invalid condition method/property'
+            }
+        }
+        
+        #if the condition is met, exit 
+        if ($checkvar -eq $conditionMatch){
+            break
+        }
+
+        $timespan = (new-timespan $check (get-date))
+
+        if ($timespan.totalmilliseconds - $lastTimeSpanCheck.totalmilliseconds -lt 5){
+            continue
+        }
+
+        $lasttimespancheck = $timespan
+
+        if ($progressbarcounter -ge 100){
+            $directionup = $false
+        }elseif($progressbarcounter -le 0){
+            $directionup = $true
+        }
+
+        if ($directionup){
+            $progressbarcounter++
+        }else{
+            $progressbarcounter--
+        }
+
+        $timespanstring = "$($timespan.seconds) seconds"
+
+        if ($timespan.minutes -gt 0){
+            $timespanstring = "$($timespan.minutes) minutes, " + $timespanstring
+        }
+        if ($timespan.hours -gt 0){
+            $timespanstring = "$($timespan.hours) hours, " + $timespanstring
+        }
+        if ($timespan.days -gt 0){
+            $timespanstring = "$($timespan.days) days, " + $timespanstring
+        }
+
+
+        write-progress -activity " " -status $messageoutput -PercentComplete $progressbarcounter -currentoperation "$timespanstring elapsed" 
+    }
+    
+    write-progress -Activity " " -status $message -completed
+
+    if ($setcontrolc){
+        [console]::TreatControlCAsInput = $controlcsave
+    }
+
+#    $pos = [System.Management.Automation.Host.Coordinates]::new(0,$host.ui.rawui.cursorposition.y)
+#    $newBuffer = $host.ui.rawui.newbuffercellarray((" " * $host.ui.rawui.buffersize.width),$host.ui.rawui.foregroundcolor,$host.ui.rawui.backgroundcolor)
+#
+#    $host.ui.rawui.SetBufferContents($pos,$newbuffer)
+
+    $completed
+    return 
+}
+
+
+
+
+function Get-Sum{
+    param(
+        [parameter(valuefrompipeline=$true)]$Number
+    )
+    begin{
+        $numbers = new-listobject
+    }
+    process{
+        if ($number -is [array]){
+            $numbers.addrange($number)
+        }else{
+            $numbers.add($number)
+        }
+    }
+    end{
+#        $numbers | measure -sum | select -expand sum
+        [linq.enumerable]::sum(([double[]]$numbers))
+    }
+}
+
+
+function get-responsevariablescope{
+    [CmdletBinding()] 
+    param(
+    )
+
+    $psstacktrace = get-pscallstack
+#    foreach($a in $psstacktrace){
+#        write-host ($psstacktrace |select *| fl|out-string)
+#    }
+#    write-host $myinvocation.scriptname
+#    write-host $PSCommandPath
+
+    $leaf = split-path $pscommandpath -leaf
+
+    $lastlocation = $null
+    $scope = 0
+
+    foreach($level in $psstacktrace){
+        if ($level.scriptname -eq $pscommandpath){
+            continue
+        }
+
+        $location = $level.location -replace ':.*$'
+        if ($location -ne $lastlocation){
+            $scope++
+        }
+        $lastlocation = $location
+    }
+
+    write-output ($scope - 1)
+}
+
+
+#as administrator
+#
+#   frida --no-pause lsass.exe -l C:\ssl-log\keylog.js
+#   tshark --% -i \Device\NPF_{9129F918-1135-43C4-9EA1-C690C9991FFC} -P -o "tls.keylog_file: c:\ssl-log\keylog.log" -w C:\ssl-log\test.pcap host ancus-api-uat01.ancus-ase-ext01.creelighting.com
+#
+#admin not needed
+#   $json = tshark --% -r c:\ssl-log\test.pcap -o "ssl.keylog_file:C:\ssl-log\keylog.log" -Y http -T json | convertfrom-json
+#tshark --% -r c:\ssl-log\tes2t.pcap.pcapng -o "tls.keylog_file:C:\ssl-log\keylog.log" -2 -R "tcp and (http.request or http.response)" -T fields -e tcp.stream | % {[int]$_} | sort -u | % {tshark -r c:\ssl-log\tes2t.pcap.pcapng -o "tls.keylog_file:C:\ssl-log\keylog.log" -z follow,tcp,ascii,$_}
+
+function Start-TShark{
+    [CmdletBinding(DefaultParameterSetName='Listen')]
+    param(
+        [parameter(parametersetname='Listen',position=0,mandatory=$true,ValueFromPipeline=$false)] [string]$HostName,
+        [parameter(parametersetname='Listen',position=1,mandatory=$true,ValueFromPipeline=$false)] [string]$Port,
+        [parameter(parametersetname='Listen',position=2,mandatory=$false,ValueFromPipeline=$false)]$InterfaceIdx = '\Device\NPF_{983E7719-E536-4067-9F29-A8879699A304}',
+        [parameter(parametersetname='Listen',position=3,mandatory=$false,ValueFromPipeline=$false)]$OutputVariable,
+        [parameter(parametersetname='Listen',position=4,mandatory=$false,ValueFromPipeline=$false)] [validatescript({ test-path $_ -pathtype leaf})]$OutFile,
+        [parameter(parametersetname='Listen',position=5,mandatory=$false,ValueFromPipeline=$false)] [switch]$ShowCommand,
+        [parameter(parametersetname='ListInterfaces')][switch] $ListInterfaces
+    )
+    #    Decompress($gzip) {
+    #    	# Create a GZIP stream with decompression mode.
+    #    	# ... Then create a buffer and write into while reading from the GZIP stream.
+    #
+    #    	using (GZipStream stream = new GZipStream(new MemoryStream(gzip), CompressionMode.Decompress))
+    #    	{
+    #    	    const int size = 4096;
+    #    	    byte[] buffer = new byte[size];
+    #    	    using (MemoryStream memory = new MemoryStream())
+    #    	    {
+    #    		int count = 0;
+    #    		do
+    #    		{
+    #    		    count = stream.Read(buffer, 0, size);
+    #    		    if (count > 0)
+    #    		    {
+    #    			memory.Write(buffer, 0, count);
+    #    		    }
+    #    		}
+    #    		while (count > 0);
+    #    		return memory.ToArray();
+    #    	    }
+    #    	}
+    #    }
+    #
+    function writePacket($string, $color,$continue = $false){
+        write-host $string -fore $color -nonewline:$continue
+    }
+
+
+    if ($listinterfaces){
+        tshark -D
+        return
+    }
+
+
+    $localip = ipconfig | grep '(?<=ipv4.*)(?<ip>\d.*)' | select -expand matches | select -expand value
+    $localip = @($localip,'127.0.0.1','localhost')
+
+
+    if ($hostname -in $localip){
+        $interface = '\Device\NPF_Loopback'
+    }else{
+        $interface = $interfaceidx
+    }
+    if ($outFile){
+        $command = [scriptblock]::create("tshark --% -nql -P -w $outfile host $hostname")
+    }else{
+        $command = [scriptblock]::create("tshark --% -i $interface -nql -d tcp.port==$port,echo -Y tcp.port==$port -T fields -e ip.src -e ip.dst -e tcp.srcport -e tcp.dstport -e echo.data host $hostname")
+    }
+
+    if ($showcommand){
+        $command
+        return
+    }
+    #tshark.exe -i3 -l -f "tcp port 80" -O http -d tcp.port==80,http -o "ip.use_geoip:FALSE" -R "not tcp.analysis.duplicate_ack" -T fields -e ip.host -e tcp.port -e http.request.full_uri -e http.request.method -e http.response.code -e http.response.phrase -e http.content_length -e data -e text -E separator=;2>&0
+    $lastoutDestination = -999
+    $lastoutDestinationPort = -999
+    $lastinSource = -999
+    $lastinSourcePort = -999
+    $lastcolor = $null
+    $outputvariableoutput = [system.text.stringbuilder]::new()
+    #[console]::TreatControlCAsInput = $true
+    try{
+        invoke-command $command | foreach {
+    #        if (($key.modifiers -band [consolemodifiers]"control") -and ($key.key -eq "W")) {
+    #            clear-host
+    #        }
+            if ($_ -match "(?<source>[^`t]+)`t(?<destination>[^`t]+)`t(?<sourceport>[^`t]+)`t(?<destinationport>[^`t]+)`t(?<data>[^`t]+)"){
+                write-verbose "localip: $($localip -join ', ')"
+                write-verbose "source: $($matches.source)"
+                write-verbose "sourceport: $($matches.sourceport)"
+                write-verbose "destination: $($matches.destination)"
+                write-verbose "destinationport: $($matches.destinationport)"
+                write-verbose "data: $($matches.data)"
+                if ($matches.source -in $localip -and $matches.sourceport -ne $port){
+                    if ($matches.destination -eq $lastoutdestination -and $matches.destinationport -eq $lastoutdestinationport){
+                        $color = "darkcyan"
+                    }else{
+                        $color = "cyan"
+                    }
+                }else{
+                    if ($matches.source -eq $lastinsource -and $matches.sourceport -eq $lastinsourceport){
+                        $color = "darkred"
+                    }else{
+                        $color = "red"
+                    }
+                }
+                if ($color -ne $lastcolor){
+                    writepacket "`n" $color
+                    $null = $outputvariableoutput.append("`n")
+                    writepacket "$([datetime]::now.tostring('yyyy-MM-dd HH:mm:ss')) " white $true
+                    writepacket "$($matches.source):$($matches.sourceport) ----> $($matches.destination):$($matches.destinationport)`n"  $color
+                    $null = $outputvariableoutput.append("$($matches.source):$($matches.sourceport) ----> $($matches.destination):$($matches.destinationport)`n")
+                }
+                $data = for($i=0; $i -lt $matches.data.length; $i+=2) {
+                    $bytesize = $matches.data.length - $i
+                    if ($bytesize -gt 2){
+                        $bytesize = 2
+                    }
+                    $int = [int]::Parse($matches.data.substring($i,$bytesize),'HexNumber')
+                    if ([Char]::IsLetterOrDigit($int) -or [Char]::IsPunctuation($int) -or [Char]::IsSymbol($int) ){
+                        [string]([char]$int)
+                    }else{
+                        if($int -eq 13){
+                            [string]"`r"
+                        }elseif ($int -eq 10){
+                            [string]"`n"
+                        }elseif ($int -eq 32){
+                            [string]" "
+                        }else{
+                            [string]"."
+                        }
+                    }
+                }
+        #        if ($data -match '^HTTP/1.1.*'){
+        #            $gzipped = $false
+        #        }
+        #
+        #        if ($data -match "(?<startdata>.*Content-Encoding: gzip[^`n]`n)(?<gzipped>.*"){
+        #            $gzipped = $true
+        #            writepacket ($matches.startdata -join '') $color
+        #
+        #            $data = $matches.gzipped
+        #        }
+                writepacket ($data -join '') $color ($color -eq $lastcolor)
+                $null = $outputvariableoutput.append(($data -join ''))
+                $lastcolor = $color
+            }
+        }
+    }finally{
+    #    [console]::TreatControlCAsInput = $false
+        if ($outputvariable){
+             set-variable $outputvariable -value $outputvariableoutput.tostring() -scope (get-responsevariablescope) -confirm:$false
+        }
+    }
+}
+
+function Invoke-InParallel{
+    [CmdletBinding()]
+
+#1..2 | % {
+#        [pscustomobject]@{
+#            input = @{
+#                Number=$_
+#            } 
+#            passthruoutput = @{
+#                Something = 'three'
+#            }
+#        }
+#    } | Invoke-InParallel -command 'asdf' -supportingcommands @{'asdf'={param($number) write-output "hi$($number)"}} | % {
+#        [pscustomobject]@{
+#            hi1 = $_.result
+#            hi2 = $_.passthruoutput['something']
+#        }
+#    }
+
+    param(
+        [parameter(valuefrompipeline,mandatory)][psobject]$CommandParameters,
+        [parameter(position=0,mandatory)][string]$Command,
+        [parameter(position=1)][hashtable]$SupportingCommands,
+        [parameter(position=2)][int]$MaxRunspaces = 20
+    )
+    
+    begin{
+        $sessionstate = [System.Management.Automation.Runspaces.InitialSessionState]::CreateDefault()
+
+        foreach($commandName in $supportingCommands.keys){
+            write-verbose "adding supporting function: $commandname"
+            $sessionstate.commands.add([System.Management.Automation.Runspaces.SessionStateFunctionEntry]::new($commandName,$supportingCommands[$commandName].tostring()))
+        }
+
+        $runspacepool = [RunspaceFactory]::CreateRunspacePool(1, $maxrunspaces,$sessionstate,$host)
+        $runspacepool.Open() 
+
+        $threads = [system.collections.generic.list[object]]::new()
+    }
+
+    process{
+        $ps = [powershell]::create()
+        $ps.runspacepool = $runspacepool
+
+            write-verbose "setting command to execute: $command"
+            [void]$ps.addcommand($command)
+            foreach($parameterName in $commandParameters.input.keys){
+                write-verbose "setting parameter for command: $parameterName"
+                [void]$ps.addparameter($parameterName,$commandParameters.input[$parameterName])
+            }
+
+        $asyncresult = $ps.begininvoke()
+        $threads.add(
+            [pscustomobject]@{
+                ps=$ps
+                asyncresult=$asyncresult
+                PassthruOutput=$commandparameters.passthruoutput
+            }
+        )
+
+    }
+
+    end{
+
+        try{
+            $threadsDone = [system.collections.generic.list[int]]::new()
+
+            do{
+                for($x=0;$x -lt $threads.count;$x++){
+
+                    write-progress -activity "Processing Threads" -status "$($threadsdone.count) of $($threads.count)" -percent ($threadsdone.count / $threads.count * 100)
+
+                    if ($x -in $threadsdone){
+                        continue
+                    }
+
+                    if ($threads[$x].asyncresult.iscompleted){
+                        $threadsdone.add($x)
+                    }
+                }
+            }while ($threadsDone.count -lt $threads.count)
+
+            write-progress -activity "Processing Threads" -status "Done" -completed
+
+            $results = [system.collections.generic.list[object]]::new()
+
+            foreach($thread in $threads){
+
+                $threaderror = $thread.ps.streams.error
+                if ($threaderror){
+#                    throw $thread.ps.streams.error
+                    write-warning "Error in thread"
+                }
+
+                $result = $thread.ps.endinvoke($thread.asyncresult)
+
+
+
+                $results.add(
+                    [pscustomobject]@{
+                        Error = $threaderror.getenumerator() | % {$_}
+                        Result = $result.getenumerator() | % {$_}
+                        PassthruOutput = $thread.PassthruOutput
+                    }
+                )
+            }
+
+            write-output $results
+        }finally{
+            foreach($thread in $threads){
+                $thread.ps.dispose()
+            }
+
+            $runspacepool.close()
+            $runspacepool.dispose()
+        }
+
+    }
+}
+
+function Get-PdfContent {
+    param(
+        [Parameter(valuefrompipeline,position=0,mandatory)][validatescript({test-path -pathtype leaf $_})][string]$PdfFile
+    ) 
+    begin{
+        if (-not ("iTextSharp.text.pdf.pdfreader" -as [type])){
+            Add-Type -Path "$PSScriptRoot\itextsharp.dll"
+        }
+    }
+    process{
+        $filepath = convert-path $pdffile 
+
+        $pdf = [iTextSharp.text.pdf.pdfreader]::new($filepath)
+
+        try{
+            for ($page = 1; $page -le $pdf.NumberOfPages; $page++){
+                $textoutput=[iTextSharp.text.pdf.parser.PdfTextExtractor]::GetTextFromPage($pdf,$page)
+
+                Write-Output ($textoutput -split "`n")
+            }    
+        }finally{
+            $pdf.Close()
+            $pdf.dispose()
+        }
+    }
+}
+
+
+function Get-UserAccountControlFromBitMask{
+    param(
+        [parameter(valuefrompipeline)]
+        $Mask
+    )
+
+    $values = @{
+        '1'='IPT'
+        '2'='ACCOUNTDISABLE'
+        '8'='HOMEDIR_REQUIRED'
+        '16'='LOCKOUT'
+        '32'='PASSWD_NOTREQD'
+        '64'='PASSWD_CANT_CHANGE'
+        '128'='ENCRYPTED_TEXT_PWD_ALLOWED'
+        '256'='TEMP_DUPLICATE_ACCOUNT'
+        '512'='NORMAL_ACCOUNT'
+        '2048'='INTERDOMAIN_TRUST_ACCOUNT'
+        '4096'='WORKSTATION_TRUST_ACCOUNT'
+        '8192'='SERVER_TRUST_ACCOUNT'
+        '65536'='DONT_EXPIRE_PASSWORD'
+        '131072'='MNS_LOGON_ACCOUNT'
+        '262144'='SMARTCARD_REQUIRED'
+        '524288'='TRUSTED_FOR_DELEGATION'
+        '1048576'='NOT_DELEGATED'
+        '2097152'='USE_DES_KEY_ONLY'
+        '4194304'='DONT_REQ_PREAUTH'
+        '8388608'='PASSWORD_EXPIRED'
+        '16777216'='TRUSTED_TO_AUTH_FOR_DELEGATION'
+        '67108864'='PARTIAL_SECRETS_ACCOUNT'
+    }
+
+    foreach($key in $values.keys){
+        if ([decimal]$mask -band [decimal]$key){
+            $values[$key]
+        }
+    }
+    
+}
+
+function Get-SslCertificateFromServer
+{
+    #https://serverfault.com/a/820698
+
+    param(
+        $hostname,
+        $port=443,
+        $SNIHeader,
+        [switch]$FailWithoutTrust
+    )
+
+    if (!$SNIHeader) {
+        $SNIHeader = $hostname
+    }
+
+    $cert = $null
+    try {
+        $tcpclient = [System.Net.Sockets.tcpclient]::new()
+        $tcpclient.Connect($hostname,$port)
+
+        #Authenticate with SSL
+        if (!$FailWithoutTrust) {
+            $sslstream = [System.Net.Security.SslStream]::new($tcpclient.GetStream(),$false, {$true})
+        } else {
+            $sslstream = [System.Net.Security.SslStream]::new($tcpclient.GetStream(),$false)
+        }
+
+        $sslstream.AuthenticateAsClient($SNIHeader)
+        $cert =  [System.Security.Cryptography.X509Certificates.X509Certificate2]($sslstream.remotecertificate)
+
+     } catch {
+        throw "Failed to retrieve remote certificate from $hostname`:$port because $_"
+     } finally {
+        #cleanup
+        if ($sslStream) {$sslstream.close()}
+        if ($tcpclient) {$tcpclient.close()}        
+     }    
+    write-output $cert
+}
+
+function Stop-TcpConnection {
+    param(
+        [parameter(valuefrompipeline)]
+        [object]$NetTcpConnection
+    )
+
+    begin{
+    }
+
+    process{
+        if (-not ($nettcpconnection.localaddress -and $nettcpconnection.localport -and $nettcpconnection.remoteaddress -and $nettcpconnection.remoteport)){
+            throw "invalid `$nettcpconnection provided"
+        }
+
+        if (-not ("NZ.TcpConnection" -as [type])) {
+            $code = @"
+    using System;
+    using System.Collections;
+    using System.Collections.Generic;
+    using System.Net.Sockets;
+    using System.Runtime.InteropServices;
+    using System.Text;
+
+    namespace NZ
+    {
+        public class TcpConnection
+        {
+            // Taken from https://github.com/yromen/repository/tree/master/DNProcessKiller
+            // It part from the Disconnecter class. 
+            // In case of nested class use "+" like that [ConnectionKiller.Program+Disconnecter]::Connections()
+
+            /// <summary> 
+            /// Enumeration of the states 
+            /// </summary> 
+            public enum State
+            {
+                /// <summary> All </summary> 
+                All = 0,
+                /// <summary> Closed </summary> 
+                Closed = 1,
+                /// <summary> Listen </summary> 
+                Listen = 2,
+                /// <summary> Syn_Sent </summary> 
+                Syn_Sent = 3,
+                /// <summary> Syn_Rcvd </summary> 
+                Syn_Rcvd = 4,
+                /// <summary> Established </summary> 
+                Established = 5,
+                /// <summary> Fin_Wait1 </summary> 
+                Fin_Wait1 = 6,
+                /// <summary> Fin_Wait2 </summary> 
+                Fin_Wait2 = 7,
+                /// <summary> Close_Wait </summary> 
+                Close_Wait = 8,
+                /// <summary> Closing </summary> 
+                Closing = 9,
+                /// <summary> Last_Ack </summary> 
+                Last_Ack = 10,
+                /// <summary> Time_Wait </summary> 
+                Time_Wait = 11,
+                /// <summary> Delete_TCB </summary> 
+                Delete_TCB = 12
+            }
+
+            /// <summary> 
+            /// Connection info 
+            /// </summary> 
+            private struct MIB_TCPROW
+            {
+                public int dwState;
+                public int dwLocalAddr;
+                public int dwLocalPort;
+                public int dwRemoteAddr;
+                public int dwRemotePort;
+            }
+
+            //API to change status of connection 
+            [DllImport("iphlpapi.dll")]
+            //private static extern int SetTcpEntry(MIB_TCPROW tcprow); 
+            private static extern int SetTcpEntry(IntPtr pTcprow);
+
+            //Convert 16-bit value from network to host byte order 
+            [DllImport("wsock32.dll")]
+            private static extern int ntohs(int netshort);
+
+            //Convert 16-bit value back again 
+            [DllImport("wsock32.dll")]
+            private static extern int htons(int netshort);
+
+            /// <summary> 
+            /// Close a connection by returning the connectionstring 
+            /// </summary> 
+            /// <param name="connectionstring"></param> 
+            public static void CloseConnection(string localAddress, int localPort, string remoteAddress, int remotePort)
+            {
+                try
+                {
+                    //if (parts.Length != 4) throw new Exception("Invalid connectionstring - use the one provided by Connections.");
+                    string[] locaddr = localAddress.Split('.');
+                    string[] remaddr = remoteAddress.Split('.');
+
+                    //Fill structure with data 
+                    MIB_TCPROW row = new MIB_TCPROW();
+                    row.dwState = 12;
+                    byte[] bLocAddr = new byte[] { byte.Parse(locaddr[0]), byte.Parse(locaddr[1]), byte.Parse(locaddr[2]), byte.Parse(locaddr[3]) };
+                    byte[] bRemAddr = new byte[] { byte.Parse(remaddr[0]), byte.Parse(remaddr[1]), byte.Parse(remaddr[2]), byte.Parse(remaddr[3]) };
+                    row.dwLocalAddr = BitConverter.ToInt32(bLocAddr, 0);
+                    row.dwRemoteAddr = BitConverter.ToInt32(bRemAddr, 0);
+                    row.dwLocalPort = htons(localPort);
+                    row.dwRemotePort = htons(remotePort);
+
+                    //Make copy of the structure into memory and use the pointer to call SetTcpEntry 
+                    IntPtr ptr = GetPtrToNewObject(row);
+                    int ret = SetTcpEntry(ptr);
+
+                    if (ret == -1) throw new Exception("Unsuccessful");
+                    if (ret == 65) throw new Exception("User has no sufficient privilege to execute this API successfully");
+                    if (ret == 87) throw new Exception("Specified port is not in state to be closed down");
+                    if (ret == 317) throw new Exception("The function is unable to set the TCP entry since the application is running non-elevated");
+                    if (ret != 0) throw new Exception("Unknown error (" + ret + ")");
+
+                }
+                catch (Exception ex)
+                {
+                    throw new Exception("CloseConnection failed (" + localAddress + ":" + localPort + "->" +  remoteAddress + ":" + remotePort + ")! [" + ex.GetType().ToString() + "," + ex.Message + "]");
+                }
+            }
+
+            private static IntPtr GetPtrToNewObject(object obj)
+            {
+                IntPtr ptr = Marshal.AllocCoTaskMem(Marshal.SizeOf(obj));
+                Marshal.StructureToPtr(obj, ptr, false);
+                return ptr;
+            }
+        }
+    }
+
+"@
+            Add-Type -TypeDefinition $code -passthru -Language CSharp -referencedassemblies "System.dll"| Out-Null
+        }
+
+        [NZ.TcpConnection]::CloseConnection($nettcpconnection.localaddress,$nettcpconnection.localport,$nettcpconnection.remoteaddress,$nettcpconnection.remoteport)
+    }
+    end{
+    }
+
+}
+#Export-ModuleMember -Function  %%%
