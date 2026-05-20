@@ -8,7 +8,7 @@
       <ScriptMethod>
         <Name>ToString</Name>
         <Script>
-            "{0}{1}{2}" -f $this.key, $this.equals, $this.value
+            "{0} {1} {2} {3}" -f $this.name, $this.key, $this.equals, $this.value
         </Script></ScriptMethod>
     </Members>
 
