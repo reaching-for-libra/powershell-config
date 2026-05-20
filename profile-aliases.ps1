@@ -1,4 +1,12 @@
 
+$unwantedAliases = @(
+    'si'
+)
+
+foreach ($a in $unwantedAliases){
+    remove-item "alias:\${a}" -force -confirm:$false
+}
+
 $aliases = @{
     cat = 'get-content'
     grep = 'select-string'
@@ -8,11 +16,16 @@ $aliases = @{
     rmdir = 'remove-item'
     sort = 'sort-object'
     s = 'select-object'
-    join = 'join-string'
+    #join = 'join-string'
     cred = 'get-credential'
     which = 'get-command'
     cp = 'copy-item'
     mv = 'move-item'
+    clip = 'set-clipboard'
+    tojson = 'convertto-json'
+    fromjson = 'convertfrom-json'
+    void = 'out-null'
+    gclip = 'get-clipboard'
 
     #custom functions
     split = 'profile-module\split-string'
@@ -24,41 +37,52 @@ $aliases = @{
     ldap = 'profile-module\Get-LdapObject'
     getbytes = 'profile-module\ConvertTo-ByteArray'
     ogrep = 'profile-module\Search-ObjectProperties'
-    whereis = 'profile-module\Where-ObjectProperty'
+    whereis = 'profile-module\Get-WhereObjectProperty'
+    vim = 'profile-module\Start-Vim'
+    git = 'C:\Users\nzeleski\AppData\Local\Programs\Git\bin\git.exe'
+    amp = 'profile-module\Invoke-Execute'
+    capitalize = 'profile-module\Invoke-Capitalization'
+    codegrep = 'profile-module\Invoke-CodeSearch'
+    deepclone = 'profile-module\Invoke-DeepClone'
+    e = 'profile-module\Invoke-ForEachExpand'
+    fls = 'profile-module\Format-ListSorted'
+    gdif = 'profile-module\Invoke-GitDiff'
+    vdif = 'profile-module\Invoke-VimDiff'
+    hascount = 'profile-module\Get-HasCount'
+    lsod = 'profile-module\Get-LastFromDirectory'
+    od = 'profile-module\Invoke-SortLastWriteTime'
+    salias = 'profile-module\New-SelectAlias'
+    re = 'profile-module\ConvertTo-RegexEscape'
+    replace = 'profile-module\Invoke-ReplaceText'
+    t = 'profile-module\Invoke-TeeVariable'
+    trim = 'profile-module\Invoke-Trim'
+    we = 'profile-module\Open-WindowsExplorer'
+    ov = 'profile-module\Open-VimforText'
+    pso = 'profile-module\ConvertTo-PsCustomObject'
+    nsa = 'profile-module\New-SelectArgument'
+    fromxml = 'profile-module\ConvertFrom-Xml'
+    flatten = 'profile-module\ConvertTo-FlatObject'
+    nonulls = 'profile-module\convertto-nonullsobject'
+    vd = 'profile-module\start-vd'
+    ovd = 'profile-module\out-vd'
+    skey = 'profile-module\select-hashtablekey'
+    jwt = 'profile-module\convertfrom-jwttoken'
+
+    #Dataverse
+    dnew = 'dataverse\new-dataversesession'
+    dremove = 'dataverse\remove-dataversesession'
+    dsessions = 'dataverse\get-dataversesessions'
+    dport = 'dataverse\set-dataverselocalhostport'
+    ddata = 'dataverse\invoke-dataverseodatarequest'
+    dtables = 'dataverse\get-dataverseentities'
+    dtable = 'dataverse\get-dataverseentity'
+    dfield = 'dataverse\get-dataverseentityfields'
+    drel = 'dataverse\get-dataverseentityrelationships'
+
+    #orderful
+    orderful = 'orderful\get-orderfultransactions'
 
     #queryhub
-    OAdd = 'queryhub\Add-OracleQueryHubConnection'
-    OBuild = 'queryhub\Invoke-OraclePackageBuild'
-    OCode = 'queryhub\Get-OracleCodeDefinition'
-    OCodes = 'queryhub\Get-OracleCodeNames'
-    OConnections = 'queryhub\Get-OracleQueryHubConnections'
-    ODef = 'queryhub\Get-OracleDefinition'
-    ODefault = 'queryhub\Get-OracleDefaultQueryHubConnection'
-    ODependencies = 'queryhub\Get-OracleDependencies'
-    OErrors = 'queryhub\Get-OracleErrors'
-    OExplain = 'queryhub\Get-OracleExplainPlan'
-    OFile = 'queryhub\Invoke-OracleQueryFromFile'
-    OHistory = 'queryhub\Get-OracleSessionSqlHistory'
-    OIndex = 'queryhub\Get-OracleIndex'
-    OKeys = 'queryhub\Get-OracleFndTableKeys'
-    OKillSession = 'queryhub\Stop-OracleSession'
-    OLastDbms = 'queryhub\Get-LastOracleDbmsOutput'
-    OLastError = 'queryhub\Get-LastOracleQueryError'
-    OLastExplain = 'queryhub\Get-LastOracleQueryExplain'
-    OLastRequest = 'queryhub\Get-LastOracleQueryRequest'
-    OLastTime = 'queryhub\Get-LastOracleQueryTime'
-    ORemove = 'queryhub\Remove-OracleQueryHubConnection'
-    OSelect = 'queryhub\Get-OracleTableSelectString'
-    OSession = 'queryhub\Get-OracleSession'
-    OSet = 'queryhub\Set-OracleDefaultQueryHubConnection'
-    OSetDate = 'queryhub\Set-OracleSessionDateFormat'
-    OSql = 'queryhub\Invoke-OracleQuery'
-    OTable = 'queryhub\Get-OracleTableSchema'
-    OTables = 'queryhub\Get-OracleTableNames'
-    OTest = 'queryhub\Test-OracleConnection'
-    os = 'queryhub\invoke-oraclescript'
-    oslist = 'queryhub\get-oraclescripts'
-
     SAdd = 'queryhub\Add-SqlServerQueryHubConnection'
     SCode = 'queryhub\Get-SqlServerDefinition'
     SCodes = 'queryhub\Get-SqlServerCodeNames'
@@ -80,22 +104,7 @@ $aliases = @{
     sfile = 'queryhub\Invoke-sqlserverQueryFromFile'
     ss = 'queryhub\invoke-sqlserverscript'
     sslist = 'queryhub\get-sqlserverscripts'
-
-    PAdd = 'queryhub\Add-PostgresQueryHubConnection'
-    PConnections = 'queryhub\Get-PostgresQueryHubConnections'
-    PDefault = 'queryhub\Get-PostgresDefaultQueryHubConnection'
-    PFile = 'queryhub\Invoke-PostgresQueryFromFile'
-    PLastError = 'queryhub\Get-LastPostgresQueryError'
-    PLastRequest = 'queryhub\Get-LastPostgresQueryRequest'
-    PLastTime = 'queryhub\Get-LastPostgresQueryTime'
-    PRemove = 'queryhub\Remove-PostgresQueryHubConnection'
-    PSet = 'queryhub\Set-PostgresDefaultQueryHubConnection'
-    PSql = 'queryhub\Invoke-PostgresQuery'
-    PTable = 'queryhub\Get-PostgresTableSchema'
-    PTables = 'queryhub\Get-PostgresTableNames'
-    PTest = 'queryhub\Test-PostgresConnection'
 }
-
 
 foreach ($key in $aliases.keys){
     if (test-path "alias:$key"){
@@ -155,20 +164,22 @@ if (-not ("NZ.PSScriptVariable" -as [type])) {
 "@
 }
 
-if(Test-Path variable:\olast) {
-    Remove-Item variable:\olast -Force
+if(Test-Path variable:\keepass) {
+    Remove-Item variable:\keepass -Force
 }
-$executioncontext.SessionState.PSVariable.Set([NZ.PSScriptVariable]::new('OLast',{@(get-lastoraclequeryresult)},$null))
+$executioncontext.SessionState.PSVariable.Set([NZ.PSScriptVariable]::new('Keepass',{@(get-keepass)},$null))
+
+if(Test-Path variable:\SConnection) {
+    Remove-Item variable:\SConnection -Force
+}
+$executioncontext.SessionState.PSVariable.Set([NZ.PSScriptVariable]::new('SConnection',{@(queryhub\get-sqlserverconnectionsession)},$null))
 
 if(Test-Path variable:\slast) {
     Remove-Item variable:\slast -Force
 }
 $executioncontext.SessionState.PSVariable.Set([NZ.PSScriptVariable]::new('SLast',{@(get-lastsqlserverqueryresult)},$null))
 
-if(Test-Path variable:\plast) {
-    Remove-Item variable:\plast -Force
+if(Test-Path variable:\azurecontext) {
+    Remove-Item variable:\azurecontext -Force
 }
-$executioncontext.SessionState.PSVariable.Set([NZ.PSScriptVariable]::new('PLast',{@(get-lastpostgresqueryresult)},$null))
-
-#type accelerators
-[psobject].assembly.gettype("System.Management.Automation.TypeAccelerators")::add("a","System.Management.Automation.PSObject")
+$executioncontext.SessionState.PSVariable.Set([NZ.PSScriptVariable]::new('AzureContext',{@(Get-AzureContexts)},$null))
