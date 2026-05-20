@@ -2718,7 +2718,10 @@ Function ConvertTo-FlatObject {
         [int]$SortIndexPadding = 6,
 
         [parameter()]
-        [string]$RootName = $null,
+        [string]$Name = $null,
+
+        [parameter()]
+        [string]$PropertyForName = $null,
 
         [Parameter(DontShow)][String[]]$Path,
         [Parameter(DontShow)][System.Collections.IDictionary] $OutputObject
@@ -2820,7 +2823,7 @@ Function ConvertTo-FlatObject {
 
                 #flatten each iteration
                 foreach ($Key in $Iterate.psbase.Keys) {
-                    ConvertTo-FlatObject -Objects @(, $Iterate[$Key]) -Separator $Separator -Base $Base -Depth $Depth -Path ($Path + $Key) -OutputObject $OutputObject -sortIndexPadding $sortindexpadding -rootname:$rootname
+                    ConvertTo-FlatObject -Objects @(, $Iterate[$Key]) -Separator $Separator -Base $Base -Depth $Depth -Path ($Path + $Key) -OutputObject $OutputObject -sortIndexPadding $sortindexpadding
                 }
 
             #already flat, set the output
@@ -2829,11 +2832,6 @@ Function ConvertTo-FlatObject {
 
                 #remove separator before array values
                 $Property = $property -replace "$([regex]::escape($separator))\[",'['
-
-                #add a root name if given
-                if (-not ([string]::isnullorwhitespace($rootname))){
-                    $Property = "$($rootname).$($property)"
-                }
 
                 #set empty value for empty dictionary
                 if ($object -is [system.collections.idictionary] -and $object.psbase.keys.count -eq 0){
@@ -2853,11 +2851,26 @@ Function ConvertTo-FlatObject {
         #entry point
         elseif ($InputObjects.Count -gt 0) {
 
+            $rootidx = -1
+
             #flatten each object
             foreach ($ItemObject in $InputObjects) {
 
+                $rootidx++
+
+                #default name
+                $rootname = $name
+
+                if ([string]::isnullorempty($rootname)){
+                    $rootname = $rootidx.tostring()
+                }
+
+                if (-not ([string]::isnullorempty($propertyforname))){
+                    $rootname = $itemobject."$propertyforname" ?? $rootname
+                }
+
                 $OutputObject = [ordered]@{}
-                ConvertTo-FlatObject -Objects @(, $ItemObject) -Separator $Separator -Base $Base -Depth $Depth -Path $Path -OutputObject $OutputObject -sortIndexPadding $sortindexpadding -rootname:$rootname
+                ConvertTo-FlatObject -Objects @(, $ItemObject) -Separator $Separator -Base $Base -Depth $Depth -Path $Path -OutputObject $OutputObject -sortIndexPadding $sortindexpadding
 
                 #error will occur below if the flattening did nothing
                 $props = ([pscustomobject]$outputobject).psobject.properties
@@ -2881,8 +2894,9 @@ Function ConvertTo-FlatObject {
                 foreach($prop in $sortedprops){
                     [pscustomobject]@{
                         pstypename = 'NZ.FlatObject.Entry'
+                        name = $rootname.trim()
                         key = $prop.Name
-                        equals = " = "
+                        equals = "="
                         value = $prop.Value
                     }
                 }
