@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<Configuration>
+  <ViewDefinitions>
+    <View>
+      <Name>NZ.FlatObjectColorView</Name>
+      <ViewSelectedBy>
+        <TypeName>NZ.FlatObject.Entry</TypeName>
+      </ViewSelectedBy>
+
+      <CustomControl>
+        <CustomEntries>
+          <CustomEntry>
+            <CustomItem>
+              <ExpressionBinding>
+              <ScriptBlock><![CDATA[
+                $keyColor = $PSStyle.Formatting.TableHeader
+                $equalColor = $PSStyle.Foreground.Yellow
+                $valueColor = $PSStyle.Foreground.White
+                $reset = $PSStyle.Reset
+                "{0}{1}{2}{3}{4}{5}{6}" -f $keyColor, $_.key, $equalColor, $_.equals, $valuecolor, $_.Value, $reset
+              ]]></ScriptBlock>
+              </ExpressionBinding>
+            </CustomItem>
+          </CustomEntry>
+        </CustomEntries>
+      </CustomControl>
+    </View>
+
+  </ViewDefinitions>
+</Configuration>
