@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Types>
+
+  <Type>
+    <Name>NZ.FlatObject.Entry</Name>
+
+    <Members>
+      <ScriptMethod>
+        <Name>ToString</Name>
+        <Script>
+            "{0}{1}{2}" -f $this.key, $this.equals, $this.value
+        </Script></ScriptMethod>
+    </Members>
+
+  </Type>
+</Types>
