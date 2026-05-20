@@ -1,3 +1,4 @@
+$script:keepassCache = $null
 
 function Split-String{
 	param(
@@ -12,7 +13,7 @@ function Split-String{
     $string -split $splitOn
 }
 
-function trim{
+function Invoke-Trim{
 	param(
 		[parameter(position=0,mandatory=$true,ValueFromPipeline=$true)] $String,
 		[switch] $RemoveEmptyLines
@@ -33,7 +34,7 @@ function trim{
     }
 }
 
-function lsod{
+function Get-LastFromDirectory{
     param(
         [argumentcompleter({
             param($commandName, $parameterName, $wordToComplete, $commandAst, $fakeBoundParameters)
@@ -53,7 +54,7 @@ function lsod{
     }
 }
 
-function od{
+function Invoke-SortLastWriteTime{
     param(
         [parameter(valuefrompipeline)][io.filesysteminfo]$Value,
         [parameter(position=0)][int]$Last
@@ -109,19 +110,23 @@ function od{
 #    }
 #}
 
-function amp{
+function Invoke-Execute{
     param(
-        [parameter(valuefrompipeline)]$file
+        [parameter(valuefrompipeline)]
+        [psobject]$file
     )
 
     process{
+        if ($file -is [System.IO.FileSystemInfo]){
+            $file = $file.fullname
+        }
         $file = convert-path $file
         & $file
     }
 }
 
 
-function set-queryhubprofile{
+function Set-QueryHubProfile{
     $queryhubparams = get-queryhubparams
     $queryhubparams.timeoutMinutes = 0 #forever
     $queryhubparams.oraclescriptdirectory = 'onedrive:\scripts\sql-scripts\oracle'
@@ -134,28 +139,38 @@ function set-queryhubprofile{
 }
 
 
-function fls{
+function Format-ListSorted{
     [CmdletBinding()] 
     param( 
        [parameter(position=0,mandatory=$false,ValueFromPipeline=$true)] $x
     )
     begin{}
     process{
-        $x | select-object ([string[]]($x | get-member -membertype property,noteproperty | %{$_.name}| sort-object))
+#        $x | select-object ([string[]]($x | get-member -membertype property,noteproperty | %{$_.name}| sort-object))
+#        $x | select-object ([string[]]($x | get-member -membertype property,noteproperty | %{$_.name}| sort-object))
+        $props = $x.psobject.properties.name | sort-object
+        if ($props){
+            $x | select-object $props
+        }
     }
     end{}
 }
 
-function replace{
+function Invoke-ReplaceText{
     [CmdletBinding()] 
     param( 
        [parameter(mandatory=$true,ValueFromPipeline=$true)] $Text,
        [parameter(position=1,mandatory=$true,ValueFromPipeline=$false)] [string]$Find,
-       [parameter(position=2,ValueFromPipeline=$false)] [string]$ReplaceWith = $null
+       [parameter(position=2,ValueFromPipeline=$false)] [string]$ReplaceWith = $null,
+       [switch]$CaseSensitive
     )
     begin{}
     process{
-        $text -replace $find,$replacewith
+        if ($casesensitive){
+            $text -creplace $find,$replacewith
+        }else{
+            $text -replace $find,$replacewith
+        }
     }
     end{}
 }
@@ -946,7 +961,7 @@ function Stop-TcpConnection {
 
 }
 
-function get-function{
+function Get-Function{
     param(
         [string]$Name,
         [string]$Path,
@@ -1131,7 +1146,7 @@ function Convert-NumberStringToSum{
 
 
 
-function salias{
+function New-SelectAlias{
     param(
         [parameter(mandatory=$true)] $Name,
         [parameter(mandatory=$true)] [scriptblock]$Value 
@@ -1143,7 +1158,7 @@ function salias{
     }
 }
 
-function gdif{
+function Invoke-GitDiff{
 
 
     param(
@@ -1261,7 +1276,127 @@ function gdif{
 #    }
 }
 
-function invoke-xslt{
+function Invoke-VimDiff{
+
+
+    param(
+        #empty - all params in $args array will be expected to be files
+        [switch]$RawInput,
+        [switch]$FlOss,
+        [switch]$CsvOss,
+        [switch]$Format,
+        [switch]$Verbose
+    )
+
+    if ($verbose){
+        $verbosepreference = 'Continue'
+    }
+
+    $files = @()
+
+    remove-item "$([system.io.path]::gettemppath())*__vdif__" -confirm:$false
+    
+    $params = $args
+    if ($args.count -eq 1 -and $args[0] -is [array]){
+        $params = $args[0]
+    }
+
+    foreach ($file in $params){
+        if ($rawinput){
+
+            $tmpfilename = "$([system.io.path]::GetTempFileName())__vdif__" 
+            $string = $file
+            if ($flOss){
+                $string = $string | format-list | out-string -stream
+            }
+            if ($csvoss){
+                $string = $string | convertto-csv | out-string -stream
+            }
+            $tmpfile = $string | set-content -path $tmpfilename -confirm:$false 
+            $files += convert-path $tmpfilename
+
+
+        }else{
+
+            if (-not (test-path $file)){
+                write-error "file not found: $file"
+                return
+            }
+
+            $files += convert-path $file
+        }
+
+    }
+
+    if ($files.count -ne 2){
+        "incorrect number of files to compare"
+        return
+    }
+
+
+    $command = "tools:\vim\gvim.exe -c 'set diffopt=inline:char' -d "
+    foreach ($file in $files){
+#        $command += """$($file -replace ' ','\ ')"" "
+        $command += """$file"" "
+    }
+
+    write-verbose $command
+    [scriptblock]::create($command).invoke()
+
+#    $lines = [scriptblock]::create($command).invoke() -split "`n"
+#
+#    if (-not $format){
+#        write-output $lines
+#        return
+#    }
+
+#    $lines -replace "($([convert]::tochar(27))\[\d*m@@.*?@@$([convert]::tochar(27))\[\d*m)\s","`n`$1`n`n" | write-ansicoloredoutput 
+
+
+
+#    $command = 'git diff -b --no-index '
+#    foreach ($file in $files){
+#        $command += """$($file -replace ' ','\ ')"" "
+#    }
+#
+#
+#$headerDone = $true
+#
+##    $command
+#    foreach ($contentLine in [scriptblock]::create($command).invoke()){
+#
+#        if ($noformat){
+#            $contentLine
+#            continue
+#        }
+#
+#        #based on unified diff / results of git diff
+#
+#        if ($contentLine -match "^diff --git") {
+#            Write-Host "`n`n`n$contentLine" -ForegroundColor Cyan 
+#            $headerDone = $false
+#        } elseif ($headerDone -eq $false -and $contentLine -match "^Index") {
+#            Write-Host $contentLine -ForegroundColor DarkCyan 
+#        } elseif ($headerDone -eq $false -and $contentLine -match "^\+{3}\s") {
+#            Write-Host $contentLine -ForegroundColor Green 
+#        } elseif ($headerDone -eq $false -and $contentLine -match "^\-{3}\s") {
+#            Write-Host $contentLine -ForegroundColor Red 
+#        } elseif ($headerDone -eq $false -and $contentLine -match "^\={3}\s") {
+#            Write-Host $contentLine -ForegroundColor DarkGray 
+#        } elseif ($contentLine -match "^\@{2}") {
+#            Write-Host "`n$contentLine`n" -ForegroundColor White 
+#            $headerDone = $true
+#        } elseif ($contentLine -match "^\+") {
+#            Write-Host $contentLine -ForegroundColor DarkGreen 
+#        } elseif ($contentLine -match "^\-") {
+#            Write-Host $contentLine -ForegroundColor DarkRed
+#        } else {
+#            Write-Host $contentLine -foregroundcolor Gray 
+#        }
+#    }
+}
+
+function invoke-Xslt{
     param(
         [string]$Xml,
         [string]$Xslt
@@ -1345,7 +1480,7 @@ function Remove-AliasFromScript {
 
 } 
 
-function re{
+function ConvertTo-RegexEscape{
     param(
         [parameter(mandatory,valuefrompipeline)]$String
     )
@@ -1358,7 +1493,7 @@ function re{
     }
 }
 
-function get-imagefromzpl{
+function Get-ImageFromZpl{
     param(
         $Zpl,
         $OutputPngFile
@@ -1427,6 +1562,10 @@ function Read-ZippedFile{
         [switch]$ListingOnly
     )
 
+    if ($zippedfile -is [system.io.fileinfo]){
+        $zippedfile = $zippedfile.fullname
+    }
+
 
     if (-not (test-path $zippedfile -pathtype leaf)){
         write-output "$zippedfile not found"
@@ -1438,6 +1577,10 @@ function Read-ZippedFile{
     if ($compressiontype -eq 'zip'){
 
         try{
+            if (-not ([System.Management.Automation.PSTypeName]'system.io.compression.zipfile').Type){
+                add-type -AssemblyName System.IO.Compression.FileSystem
+                $null = [System.IO.Compression.zipfile]::Open
+            }
 
             $zipfile = [System.IO.Compression.zipfile]::open($zippedfile,[system.io.compression.ziparchivemode]::read)
             $hashtable = @{}
@@ -1531,7 +1674,7 @@ function Read-ZippedFile{
     }
 }
 
-function deepclone{
+function Invoke-DeepClone{
     param(
         $SourceObject
     )
@@ -1598,8 +1741,9 @@ function Join-Collections{
 
 #proxy function to replace tee-object specifically for variables
 #tee-object sets variables after output, which means ctrl-c during large output will not set the variable
-#this function sets the variable and then displays the output
-function t {
+#the -outvariable switch will only capture partial output on ctrl-c, and also results in an arraylist type, even if the output is an object
+#this function sets the variable as the actual object type and then displays the output after capturing the whole value
+function Invoke-TeeVariable {
 
     [cmdletbinding()]
     param(
@@ -1622,12 +1766,12 @@ function t {
         $PSBoundParameters['Confirm'] = $false
 
         #lift up to calling scope
-        $PSBoundParameters['Scope'] = 1
+        $PSBoundParameters['Scope'] = 2
 
         Remove-Variable -name $name -scope $psboundparameters['Scope'] -erroraction silentlycontinue -confirm:$false
 
         $outNoOutput = $null
-        if ($PSBoundParameters.TryGetValue('NoOutput', [ref]$outBuffer)) {
+        if ($PSBoundParameters.TryGetValue('NoOutput', [ref]$outNoOutput)) {
             $null = $PSBoundParameters.remove('NoOutput')
         }
 
@@ -1650,15 +1794,15 @@ function t {
         }
     }
 
-    clean {
-        if ($null -ne $steppablePipeline) {
-            $steppablePipeline.Clean()
-        }
-    }
+#    clean {
+#        if ($null -ne $steppablePipeline) {
+#            $steppablePipeline.Clean()
+#        }
+#    }
 }
 
 
-function e {
+function Invoke-ForEachExpand {
     [CmdletBinding()]
     param(
         [parameter(valuefrompipeline)]$Data,
@@ -1684,7 +1828,7 @@ function e {
     }
 }
 
-function capitalize{
+function Invoke-Capitalization{
     param(
         [parameter(valuefrompipeline)]$String,
         [parameter(position=0)]$CapitalizeAfterBackreference = '^|_'
@@ -1710,7 +1854,7 @@ function capitalize{
     }
 }
 
-function format-stringwithlinenumbers{
+function Format-StringWithLineNumbers{
     param(
         [parameter(valuefrompipeline)][string]$Line
     )
@@ -1729,7 +1873,7 @@ function Get-LdapObject{
     param(
         [hashtable]$Filters = @{objectCategory='person';sAMAccountName='nzeleski'},
 #        [validateset('asdf.com')]
-        $DomainName = 'asdf.com'
+        $DomainName = $env:userdomain
     )
 
     $domain = [adsi]"LDAP://$domainname"
@@ -1769,7 +1913,7 @@ function Get-LdapObject{
     }
 }
 
-function hascount{
+function Get-HasCount{
     [CmdletBinding()]
 
     param (
@@ -1820,24 +1964,68 @@ function ConvertTo-ByteArray{
 function Search-ObjectProperties{
     param(
         [parameter(valuefrompipeline)]$Object,
-        [parameter(position=0)]$Regex,
-        [switch]$NotMatch
+        [parameter(position=0)]$ValueRegex,
+        [parameter(position=1)]$KeyRegex,
+        [switch]$NotMatchValue,
+        [switch]$NotMatchKey,
+        [switch]$CaseSensitiveValue,
+        [switch]$CaseSensitiveKey,
+#        [switch]$UseXml,
+        [parameter(position=2)][int]$Depth = 10
     )
     begin{
     }
     process{
+        #only works if root is xml
+        if ($object -is [xml]){
+            $object = $object | convertto-jsonfromxml -jsondepth $depth
+        }
+        $jsonsplit = $object | convertto-json -depth $depth | % {$_ -split "\r?\n"}
+        $valuematchfound = $false
 
-#        if (-not $notmatch){
-#            $object | where {[System.Text.RegularExpressions.Regex]::Unescape(($_ | convertto-json -depth 10)) -match $regex}
-#        }else{
-#            $object | where {[System.Text.RegularExpressions.Regex]::Unescape(($_ | convertto-json -depth 10)) -notmatch $regex}
-#        }
+        #todo - work for arrays
+        foreach ($line in $jsonsplit) {
+            $linematch = $line -match '(^\s*")(?<key>.*?)((?<!\\)"\s*: "?)(?<value>.*?)("?,?$)'
+            $linematches = $matches
 
-        
-        if (-not $notmatch){
-            $object | where {($_ | ConvertTo-Xml).objects.object.property.'#text' -match $regex}
-        }else{
-            $object | where {($_ | ConvertTo-Xml).objects.object.property.'#text' -notmatch $regex}
+            if (-not ($linematch)){
+                continue
+            }
+
+            if ([string]::isnullorempty($linematches.value)){
+                continue
+            }
+            if ($keyregex -ne $null){
+                #todo - include form feed, backspace, and unicode values for grepping
+                $result = $linematches.key.replace('\"','"').replace('\"','"').replace('\/','/').replace('\b','').replace('\f','').replace('\n',"`n").replace('\r',"`r").replace('\t',"`t")
+                $result = $result -replace '\\u\d{4}',''
+                $result = $result.replace("\\","\")
+
+                #this isn't a good key match, but maybe the next one will be
+                if ($casesensitivekey){
+                    if (($result -cmatch $keyregex -and $notmatchkey) -or ($result -cnotmatch $keyregex -and (-not $notmatchkey))){
+                        continue
+                    }
+                }else{
+                    if (($result -match $keyregex -and $notmatchkey) -or ($result -notmatch $keyregex -and (-not $notmatchkey))){
+                        continue
+                    }
+                }
+            }
+
+            #todo - include form feed, backspace, and unicode values for grepping
+            $result = $linematches.value.replace('\"','"').replace('\"','"').replace('\/','/').replace('\b','').replace('\f','').replace('\n',"`n").replace('\r',"`r").replace('\t',"`t")
+            $result = $result -replace '\\u\d{4}',''
+            $result = $result.replace("\\","\")
+
+            if (((-not $casesensitivevalue) -and ($result -match $valueregex)) -or ($casesensitivevalue -and ($result -cmatch $valueregex))){
+                $valuematchfound = $true
+                break
+            }
+        }
+
+        if (($valuematchfound -and (-not $notmatchvalue)) -or ((-not $valuematchfound) -and $notmatchvalue)){
+            $object
         }
     }
     end{
@@ -1851,7 +2039,9 @@ function Convertto-JsonFromXml{
         $xml,
         [switch]$Raw,
         [switch]$AsJson,
-        [switch]$AsJsonCompressed
+        [switch]$AsJsonCompressed,
+        [parameter()]
+        [int]$JsonDepth = 25
     )
 
     begin{
@@ -1862,16 +2052,21 @@ function Convertto-JsonFromXml{
         if ($raw){
             write-output $json #| convertto-
         }else{
-            $output =  $json|convertfrom-json
-            $prop = $output | get-member -membertype noteproperty | select -expand name
-            $output = $output."$prop"
+            $jsonoutput =  $json|convertfrom-json
+            $props = $jsonoutput | get-member -membertype noteproperty | select -expand name
+            $output = [ordered]@{}
+            foreach($prop in $props){
+                $output.add($prop, $jsonoutput.${prop})
+            }
+
+            $result = [pscustomobject]$output
 
             if ($asjson){
-                $output | convertto-json -depth 25
+                $result | convertto-json -depth $jsondepth
             }elseif ($asjsoncompressed){
-                $output | convertto-json -depth 25 -compress
+                $result | convertto-json -depth $jsondepth -compress
             }else{
-                write-output $output
+                write-output $result
             }
         }
 
@@ -1937,7 +2132,7 @@ function Rename-FileExtension{
     }
 }
 
-function Where-ObjectProperty{
+function Get-WhereObjectProperty{
     param(
         [parameter(valuefrompipeline)]
         $Value,
@@ -1955,7 +2150,7 @@ function Where-ObjectProperty{
     }
 }
 
-function codegrep {
+function Invoke-CodeSearch {
     [CmdletBinding()]
     param(
 
@@ -1976,7 +2171,7 @@ function codegrep {
     begin{
     }
     process{
-        $files = get-childitem $rootdirectory -include *.cs,*.vb, *.config,*.json,*.aspx,*.rdl,*html,*.csproj,*.vbproj,*.runsettings,*.ps1,*.psm1,*.js,*.jsx,*.ts,*.tsx,*.css,*.fsi,*.fsx,*.fsproj,*.sql,*.pls,*.pkb,*.pks -recurse -exclude $exclude
+        $files = get-childitem $rootdirectory -include *.cs,*.vb, *.config,*.json,*.aspx,*.rdl,*html,*.csproj,*.vbproj,*.runsettings,*.ps1,*.psm1,*.js,*.jsx,*.ts,*.tsx,*.css,*.fsi,*.fsx,*.fsproj,*.sql,*.pls,*.pkb,*.pks,*.xml -recurse -exclude $exclude
 
         if (-not $nofilter){
             $files = $files | where fullname -notmatch '\\(obj|bin)\\' 
@@ -1994,7 +2189,7 @@ function codegrep {
     }
 }
 
-function get-responsevariablescope{
+function Get-ResponseVariableScope{
     [CmdletBinding()] 
     param(
     )
@@ -2034,50 +2229,457 @@ function get-responsevariablescope{
         write-output 2
     }
 }
-
-function Format-FlatObject{
+function show-processwindow {
     param(
-        [parameter(valuefrompipeline,mandatory)]
-        [object]$FlatObject,
+        [int]$handle
+    )
 
-        [switch]$WithColor,
-        [switch]$IncludeValue,
-        [switch]$Sort
+    Add-Type @"
+using System;
+using System.Runtime.InteropServices;
+public class Program {
+    [DllImport("user32.dll")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    public static extern bool SetForegroundWindow(IntPtr hWnd);
+}
+"@
+
+        $null = [Program]::SetForegroundWindow($handle)
+}
+
+function start-vim(){
+    param(
+        [parameter(valuefrompipeline=$true)]$File = $null,
+        [parameter()][alias('serv','server')]$ServerName = "DEFAULT",
+        [parameter()][validateset('gvim','vim')]$ServerType = "gvim",
+        [switch]$Transparent,
+        [switch]$NoWrap
+    )
+
+    begin{
+        $filesString = ""
+        $stop = $false
+    }
+
+    process{
+
+        if ($stop){
+            return
+        }
+
+        if (-not $file){
+            return
+        }
+
+        if ($file -is [system.io.filesysteminfo]){
+            $file = $file.fullname
+        }
+
+        if ( (test-path $file -pathtype container)){
+            write-output "Directories not supported: $file"
+            $stop = $true
+            return
+        }
+
+        if (-not (test-path $file)){
+
+            $null | set-content $file -errorvariable fileerror -erroraction silentlycontinue
+
+            if ($fileerror){
+                write-output "Failed: $file"
+                $stop = $true
+                return
+            }
+
+            $file = ls $file | select -expand fullname
+            
+        }
+        
+#        if ($file -is [system.io.fileinfo]){
+#            $file = $file.fullname
+#        }
+
+        if ($file -and $file.contains(':')){
+            if ($file -match '(?<drive>^[^:]{0,}:)(?<solidus>\\|/){0,}(?<file>.*$)'){
+                if (-not (test-path $file)){
+                    $null | set-content $file
+                }
+                $file = (convert-path "$($matches.drive)$($matches.solidus)$($matches.file)")
+            }
+        }
+
+        $files = $null
+        if ($file){
+
+            if ($file -is [system.io.fileinfo]){
+                $files = $file
+            }else{
+                if (test-path $file){
+                    $files = ls $file -erroraction silentlycontinue
+                }else{
+                    try{
+                        $files = [system.io.fileinfo]$file
+                    }catch{
+                        #ignore invalid file names
+                    }
+                }
+            }
+
+
+            foreach ($filepath in $files){
+#                if ($filepath.fullname.toupper().startswith('C:\Windows\System32\WindowsPowerShell\v1.0\'.toupper()) -and (-not (convert-path .).toupper().startswith('C:\Windows\System32\WindowsPowerShell\v1.0\'.toupper()))){
+#                    $filesString += ('"' + ($filepath.fullname -replace 'C:\\Windows\\System32\\WindowsPowerShell\\v1.0',(convert-path .)) + '" ')
+#                }else{
+                    $filesString += ('"' + $filepath.fullname + '" ')
+#                }
+            }
+        }
+    }
+
+    end{
+
+        if ($stop){
+            return
+        }
+
+        $Servername = $Servername.toupper()
+
+#        $process = get-process gvim -erroraction silentlycontinue | where {$_.commandline -match "--servername ""$Servername"""} -erroraction silentlycontinue
+        $process = get-process $servertype -erroraction silentlycontinue | where {$_.mainwindowtitle -match " - $Servername`$"} -erroraction silentlycontinue
+
+        if ($process){
+
+            if ($nowrap){
+                $noWrapCommand = '--remote-send ":setlocal nowrap<CR>"'
+            }
+
+
+            if ($filesstring.trim().length -eq 0){
+                $startProcess = (start-process tools:\vim\$servertype.exe -args "--servername ""$Servername"" --remote-send "":enew<CR>"" $nowrapcommand" -windowstyle normal -passthru -erroraction silentlycontinue -confirm:$false)
+            }else{
+                $startProcess = (start-process tools:\vim\$servertype.exe -args "--servername ""$Servername"" $nowrapcommand --remote-silent $filesstring" -windowstyle normal -passthru -erroraction silentlycontinue -confirm:$false)
+#                "(start-process tools:\vim\$servertype.exe -args ""--servername ""$Servername"" $nowrapcommand --remote-silent $filesstring"" -windowstyle normal -passthru -erroraction silentlycontinue -confirm:$false)"
+
+                if ($nowrapcommand){
+                    $startProcess = (start-process tools:\vim\$servertype.exe -args "--servername ""$Servername"" $nowrapcommand " -windowstyle normal -passthru -erroraction silentlycontinue -confirm:$false)
+                }
+            }
+            $startProcess.commandline
+#            get-processcommandline $startprocess.id
+        }else{
+
+            if ($nowrap){
+                $noWrapCommand = '-c "setlocal nowrap"'
+            }
+            if ($script:vimrcdirectory){
+                $vimRcPathCommand = "-c ""set rtp=$(convert-path $script:vimrcdirectory)\vimfiles | set rtp+=$(convert-path tools:\vim) | source $(convert-path $script:vimrcdirectory)\_vimrc "" "
+            }
+
+            if ($filesstring.trim().length -eq 0){
+                $process = start-process tools:\vim\$servertype.exe -args "$vimrcpathcommand --servername ""$Servername"" $nowrapcommand" -windowstyle normal -passthru -erroraction silentlycontinue -confirm:$false
+#write-verbose (Get-ProcessCommandLine $process.id)
+            }else{
+#                $process = start-process tools:\vim\gvim.exe -args "--servername ""$Servername"" --remote-silent $filesstring " -windowstyle normal -passthru -erroraction silentlycontinue
+                $process = start-process tools:\vim\$servertype.exe -args "$vimrcpathcommand --servername ""$Servername"" $nowrapcommand $filesstring" -windowstyle normal -passthru -erroraction silentlycontinue -confirm:$false
+#write-verbose (Get-ProcessCommandLine $process.id)
+            }
+
+            $process.commandline
+#            get-processcommandline $startprocess.id
+            
+            if ($Transparent){
+                for ($x = 1;$x -le 500; $x++){
+                    $process = get-process -id $process.id -erroraction silentlycontinue
+                    if (-not $process){
+                        break
+                    }
+                    if ($process.MainWindowTitle){
+                        [void]($process | set-windowtransparency)
+                        break
+                    }
+                }
+            }
+        }
+
+#        if ($host.name -eq 'ConsoleHost' -and $host.version.major -lt 6){
+#            add-nativehelpertype
+#            [nativehelper]::bringwindowtofront($process.mainwindowhandle)
+#        }
+         if (test-path function:\show-processwindow){
+#            start-process $bringtofrontexe -args $process.mainwindowhandle -confirm:$false
+            show-processwindow $process.mainwindowhandle
+         }
+
+    }
+}
+
+function Clear-KeePass{
+    $script:keepassCache = $null
+}
+
+function Get-KeePass{
+    [cmdletbinding()]
+    param(
+        [parameter(position=0)]
+        [string]$KdbxFilePath = 'Tools:\keepass\passwords.kdbx',
+
+        [switch]$Fetch
+    )
+
+    if ($fetch){
+
+        $csv = tools:\keepass\keepassxc-cli.exe export -f csv "$(convert-path $kdbxfilepath)" | convertfrom-csv | where {$_.group -eq "Root/passwords"}
+        if (-not $csv){
+            return
+        }
+
+        $hash = [ordered]@{}
+
+        foreach($record in $csv){
+
+            $name = $record.title -replace '[^a-zA-Z0-9]',"_"
+            $name = $name.trim()
+
+            $username = $record.username.trim()
+            $pass = $record.password | ConvertTo-SecureString -AsPlainText -force
+            $url = $record.url.trim()
+
+            $credential = $null
+            $note = $null
+
+            try{
+                $credential = [pscredential]::new($username,$pass)
+            }catch{
+                $note = "could not map credential object"
+                write-warning $note
+            }
+
+            $value = [pscustomobject]@{
+                credential = $credential
+                url = $url
+                note = $note
+            }
+            $hash.add($name, $value)
+        }
+
+        $script:keepassCache = [pscustomobject]$hash
+    }
+
+
+    $script:keepassCache
+}
+
+function new-password{
+    [cmdletbinding()]
+
+    param(
+        [parameter(position=0)]
+        [validaterange(5, 50)]
+        [int] $Length = 22
+    )
+
+    tools:\keepass\keepassxc-cli.exe generate --length $length --every-group --lower --upper --numeric --special
+}
+
+function new-passphrase{
+    [cmdletbinding()]
+
+    param(
+        [parameter(position=0)]
+        [validaterange(1, 10)]
+        [int] $WordCount = 5
+    )
+
+    tools:\keepass\keepassxc-cli.exe diceware --words $wordcount
+}
+
+function Open-WindowsExplorer {
+    param(
+        [parameter(position=0)]
+        [string] $Directory = ".\"
     )
 
     process{
-        $gm = $flatobject.psobject.properties
-        if ($sort){
-            $gm = $gm | sort name
+        $dir = convert-path $directory -ea 0
+        if ($dir -eq $null -or -not (test-path -pathtype container $directory)){
+            "invalid directory"
+            return
         }
-        if (-not $withcolor){
-            $green = ""
-            $yellow = ""
-            $brightyellow = ""
-            $white = ""
-            $cyan = ""
-            $brightblack = ""
-            $reset = ""
-        }else{
-            $green = $psstyle.foreground.green
-            $yellow = $psstyle.foreground.yellow
-            $brightyellow = $psstyle.foreground.brightyellow
-            $white = $psstyle.foreground.white
-            $cyan = $psstyle.foreground.cyan
-            $brightblack = $psstyle.foreground.brightblack
-            $reset = $psstyle.reset
-        }
-        foreach($key in $gm.name){
 
-            if (-not $includevalue){
-                $value = ""
-            }else{
-                $value = "$yellow = $brightblack$($flatobject.$key)"
-            }
-            "$green$key$value$reset"
-        }
+        explorer $dir
     }
 }
+
+function Open-VimforText{
+    [cmdletbinding()]
+
+    param(
+        [parameter(valuefrompipeline)]
+        [string[]] $Text,
+
+        [parameter(position=0)]
+        [string] $FileExtension = "txt",
+
+        [parameter(position=1)]
+        [string] $ServerName = "OV"
+    )
+
+    begin{
+        $stringbuilder = [system.text.stringbuilder]::new()
+    }
+
+    process{
+        $null = $stringbuilder.appendline($text)
+    }
+
+    end{
+        if ($stringbuilder.length -eq 0){
+            return
+        }
+        
+        remove-item "$([system.io.path]::gettemppath())*__ov__.*" -confirm:$false
+
+        $tmpfilename = "$([system.io.path]::GetTempFileName())__ov__.$fileextension" 
+
+        $tmpfile = $stringbuilder.tostring() | set-content -path $tmpfilename -confirm:$false 
+        $tmpfilename
+
+        $null = start-vim $tmpfilename -servername $servername
+    }
+
+}
+
+function Get-Type{
+    [cmdletbinding()]
+
+    param(
+        [parameter(valuefrompipeline)]
+        [psobject] $Object
+    )
+
+    process{
+        $object.gettype()
+    }
+}
+
+function ConvertFrom-Xml{
+    [cmdletbinding()]
+
+    param(
+        [parameter(valuefrompipeline)]
+        [psobject] $Object
+    )
+
+    process{
+        [xml]$object
+    }
+}
+
+function ConvertTo-PsCustomObject{
+    param(
+        [parameter(valuefrompipeline)]
+        [hashtable]$HashTable
+    )
+
+    [pscustomobject]$hashtable
+}
+
+function New-SelectArgument{
+    param(
+        [parameter(mandatory,position=0)]
+        [string]$Label,
+
+        [parameter(mandatory,position=1)]
+        [scriptblock]$Scriptblock
+    )
+
+    @{label=$label;ex=$scriptblock}
+}
+
+function Rename-Stripped{
+    [cmdletbinding()]
+
+    param(
+        [parameter(mandatory,valuefrompipeline)]
+        [System.IO.FileInfo]$File, 
+        
+        [switch]$Quiet
+    )
+
+    process{
+        $basename = $file.basename.tolower().trim() -replace "[\.-]*$"
+        $basename = $basename -replace "\s+", '-'
+        $extension = $file.extension.tolower().trim()
+        $name = "$basename$extension"
+
+        if (([string]::compare($file.name, $name)) -eq 0){
+            return
+        }
+
+        rename-item $file "$basename$extension" -confirm:(-not $quiet)
+    }
+}
+
+#function Format-FlatObject{
+#    param(
+#        [parameter(valuefrompipeline,mandatory)]
+#        [object]$FlatObject,
+#
+#        [parameter()]
+#        [int]$SortIndexPadding = 3,
+#
+#        [switch]$WithColor,
+#        [switch]$ExcludeValue,
+#        [switch]$Sort
+#    )
+#
+#    begin{
+#        $oldRendering = $PSStyle.OutputRendering
+#
+#
+#write-host ([console]::isoutputredirected)
+#        if ($IsOutputRedirected) {
+#            $PSStyle.OutputRendering = [System.Management.Automation.OutputRendering]::PlainText
+#        }
+#    }
+#
+#    process{
+#        $gm = $flatobject.psobject.properties
+#
+#        
+#        if ($sort){
+#            $sortedgm = @($gm | select-object name,value)
+#            for ($idx = 0; $idx -lt $sortedgm.count;$idx++){
+#                1..($Sortindexpadding - 1) | foreach-object {
+#                    $sortedgm[$idx].name = $sortedgm[$idx].name -replace "(?<=\[)(\d{$_})(?=])", (("0" * ($Sortindexpadding - $_)) + '$1')
+#                }
+#            }
+#            $gm = $sortedgm | sort name
+#        }
+##        if (-not $withcolor){
+##            $keycolor = ""
+##            $equalcolor = ""
+##            $valuecolor = ""
+##        }else{
+#            $keycolor = $psstyle.formatting.tableheader
+#            $equalcolor = $psstyle.foreground.yellow
+#            $valuecolor = $psstyle.foreground.white
+##        }
+#        foreach($rec in $gm){
+#            $key = "$keycolor$($rec.name)"
+#
+#            if ($excludevalue){
+#                $value = ""
+#            }else{
+#                $value = "$equalcolor = $valuecolor$($rec.value)"
+#            }
+#            "$key$value$reset"
+#        }
+#    }
+#    end{
+#        $PSStyle.OutputRendering = $oldRendering
+#    }
+#}
 
 Function ConvertTo-FlatObject {
     <#
@@ -2112,53 +2714,98 @@ Function ConvertTo-FlatObject {
         [int]
         $Depth = 10,
 
+        [parameter()]
+        [int]$SortIndexPadding = 6,
+
+        [parameter()]
+        [string]$RootName = $null,
+
         [Parameter(DontShow)][String[]]$Path,
-        [Parameter(DontShow)][System.Collections.IDictionary] $OutputObject,
-
-        [alias('c')]
-        [switch]
-        $WithColor,
-
-        [alias('v')]
-        [switch]
-        $IncludeValue,
-
-        [alias('s')]
-        [switch]$Sort
-
-
-
+        [Parameter(DontShow)][System.Collections.IDictionary] $OutputObject
     )
     Begin {
         $InputObjects = [System.Collections.Generic.List[Object]]::new()
+            $basecount = 0
     }
     Process {
         foreach ($O in $Objects) {
+            
+
+            #special case where flattening something without properties - e.g. an array of numbers
+            if ($path -eq $null -and (${o}?.GetType().isprimitive -or ${o}?.GetType().isenum)) {
+                $o = @{"__base_value[$($basecount)]" = $o}
+                $basecount++
+            }
+
+            #xml doesn't flatten well unless converted
+            if (${o}?.GetType().Name -in 'XmlElement', 'XmlDocument', 'XmlNode', 'XmlLinkedNode') {
+                $o = $o | convertto-jsonfromxml
+            }
+
+            #jobject doesn't flatten at all. first encountered in an azure logic app object
+            elseif($o -is [Newtonsoft.Json.Linq.JObject]){
+                try{
+                $o = $o.tostring() | convertfrom-json -depth $depth
+                }catch{
+                    write-information "error converting JObject from json. Retrying AsHashTable.."
+                    $o = $o.tostring() | convertfrom-json -depth $depth -ashashtable
+                }
+            }
+            #jvalue doesn't flatten at all. first encountered in an azure logic app object
+            elseif($o -is [Newtonsoft.Json.Linq.JValue]){
+                $o = $o.value
+            }
+
+            #skip if null
+            if ($o -eq $null){
+                continue
+            }
+
+            #add to objects to evaluate
             $InputObjects.Add($O)
         }
     }
     End {
+        
+        #not the first level of execution nest
         If ($PSBoundParameters.ContainsKey("OutputObject")) {
             $Object = $InputObjects[0]
             $Iterate = [ordered] @{}
+
+
+            #if object is null, then it can be 
             if ($null -eq $Object) {
-                #Write-Verbose -Message "ConvertTo-FlatObject - Object is null"
-#            } elseif ($Object.GetType().Name -in 'String', 'DateTime', 'TimeSpan', 'Version', 'Enum') {
-           } elseif ($Object.GetType().Name -in 'String', 'DateTime', 'DateTimeOffset', 'TimeSpan', 'Version', 'Enum') {
+
+           #don't flatten certain objects where the short version is preferable
+           } elseif ($Object.GetType().isenum) {
                 $Object = $Object.ToString()
-            }
-            elseif ($Depth) {
+           } elseif ($Object.GetType().Name -in 'String', 'DateTime', 'DateTimeOffset', 'TimeSpan', 'Version') {
+                $Object = $Object.ToString()
+           }
+
+           #flatten to the specified depth
+           elseif ($Depth) {
                 $Depth--
+
+                #take as is for dictionary
                 If ($Object -is [System.Collections.IDictionary]) {
                     $Iterate = $Object
-                }
-                elseif ($Object -is [Array] -or $Object -is [System.Collections.IEnumerable]) {
+
+                #take as is for dictionary
+                }elseif ($object -is [Newtonsoft.Json.Linq.JObject]){
+                    $Iterate = $Object
+
+                #modify name for array depth and assign the value
+                }elseif ($Object -is [Array] -or $Object -is [System.Collections.IEnumerable]) {
                     $i = $Base
+
                     foreach ($Item in $Object.GetEnumerator()) {
                         $Iterate["[$i]"] = $Item
                         $i += 1
                     }
                 }
+
+                #assign the values for each property
                 else {
                     foreach ($Prop in $Object.PSObject.Properties) {
                         if ($Prop.IsGettable) {
@@ -2167,23 +2814,502 @@ Function ConvertTo-FlatObject {
                     }
                 }
             }
-            If ($Iterate.Keys.Count) {
-                foreach ($Key in $Iterate.Keys) {
-                    ConvertTo-FlatObject -Objects @(, $Iterate["$Key"]) -Separator $Separator -Base $Base -Depth $Depth -Path ($Path + $Key) -OutputObject $OutputObject  -withcolor:$withcolor -includevalue:$includevalue -sort:$sort
+
+            #"keys" may be the name of a property, use psbase to ensure that we're iterating through hashtable keys
+            If ($Iterate.psbase.Keys.Count) {
+
+                #flatten each iteration
+                foreach ($Key in $Iterate.psbase.Keys) {
+                    ConvertTo-FlatObject -Objects @(, $Iterate[$Key]) -Separator $Separator -Base $Base -Depth $Depth -Path ($Path + $Key) -OutputObject $OutputObject -sortIndexPadding $sortindexpadding -rootname:$rootname
+                }
+
+            #already flat, set the output
+            } else {
+                $Property = $Path -Join $Separator
+
+                #remove separator before array values
+                $Property = $property -replace "$([regex]::escape($separator))\[",'['
+
+                #add a root name if given
+                if (-not ([string]::isnullorwhitespace($rootname))){
+                    $Property = "$($rootname).$($property)"
+                }
+
+                #set empty value for empty dictionary
+                if ($object -is [system.collections.idictionary] -and $object.psbase.keys.count -eq 0){
+                    $OutputObject[$Property] = ""
+
+                #set empty value for empty array
+                }elseif (($object -is [array] -or $object -is [system.collections.ienumerable]) -and @($object).count -eq 0){
+                    $OutputObject[$Property] = ""
+
+                #set string representation of value
+                }else{
+                    $OutputObject[$Property] = ${Object}?.tostring()
                 }
             }
-            else {
-                $Property = $Path -Join $Separator
-$Property = $property -replace "$([regex]::escape($separator))\[",'['
-                $OutputObject[$Property] = $Object
-            }
         }
+
+        #entry point
         elseif ($InputObjects.Count -gt 0) {
+
+            #flatten each object
             foreach ($ItemObject in $InputObjects) {
+
                 $OutputObject = [ordered]@{}
-                ConvertTo-FlatObject -Objects @(, $ItemObject) -Separator $Separator -Base $Base -Depth $Depth -Path $Path -OutputObject $OutputObject  -withcolor:$withcolor -includevalue:$includevalue -sort:$sort
-                [PSCustomObject] $OutputObject | format-flatobject -withcolor:$withcolor -includevalue:$includevalue -sort:$sort
+                ConvertTo-FlatObject -Objects @(, $ItemObject) -Separator $Separator -Base $Base -Depth $Depth -Path $Path -OutputObject $OutputObject -sortIndexPadding $sortindexpadding -rootname:$rootname
+
+                #error will occur below if the flattening did nothing
+                $props = ([pscustomobject]$outputobject).psobject.properties
+
+                #sorting the properties helps in viewing the output 
+                $sortedprops = @($props | select-object name,value)
+
+                #left pad array element values so that they can be sorted numerically
+                for ($idx = 0; $idx -lt $sortedprops.count;$idx++){
+                    1..($Sortindexpadding - 1) | foreach-object {
+                        $sortedprops[$idx].name = $sortedprops[$idx].name -replace "(?<=\[)(\d{$_})(?=])", (("0" * ($Sortindexpadding - $_)) + '$1')
+                    }
+                }
+
+                #remove the padded zeroes
+                for ($idx = 0; $idx -lt $sortedprops.count;$idx++){
+                    $sortedprops[$idx].name = $sortedprops[$idx].name -replace "(?<=\[)(?<asdf>0+)(?=\d+])"
+                }
+
+                #return output
+                foreach($prop in $sortedprops){
+                    [pscustomobject]@{
+                        pstypename = 'NZ.FlatObject.Entry'
+                        key = $prop.Name
+                        equals = " = "
+                        value = $prop.Value
+                    }
+                }
+
             }
         }
     }
 }
+
+
+#vibe coded, not reviewed
+function ConvertTo-NoNullsObject {
+    [CmdletBinding()]
+    param(
+        [AllowNull()]
+        [Parameter(ValueFromPipeline)]
+        [object] $InputObject
+    )
+
+    begin{
+        # Helper: treat "empty" nodes as removable
+        function Test-IsEmptyNode([object]$v) {
+            if ($null -eq $v) { return $true }
+
+            # Empty dictionary / hashtable
+            if ($v -is [System.Collections.IDictionary]) {
+                return $v.Count -eq 0
+            }
+
+            # Empty arrays / lists (covers arrays and many collections)
+            if ($v -is [System.Collections.ICollection] -and $v -isnot [string]) {
+                return $v.Count -eq 0
+            }
+
+            # Property-less custom objects (key missing piece)
+            if ($v -is [System.Management.Automation.PSCustomObject]) {
+                # Use PSObject.Properties enumeration to detect "no properties"
+                return -not $v.psobject.Properties.GetEnumerator().MoveNext()
+            }
+
+            return $false
+        }
+    }
+
+    process {
+        if ($null -eq $InputObject) { return $null }
+
+        # Leaf scalars
+        if ($InputObject -is [string] -or $InputObject.GetType().IsPrimitive) {
+            return $InputObject
+        }
+
+        # Dictionaries
+        if ($InputObject -is [System.Collections.IDictionary]) {
+            $out = @{}
+            foreach ($k in $InputObject.Keys) {
+                $child = ConvertTo-NoNullsObject -InputObject $InputObject[$k]
+                if (-not (Test-IsEmptyNode $child)) {
+                    $out[$k] = $child
+                }
+            }
+            return $out
+        }
+
+        # Arrays (preserve nesting)
+        if ($InputObject -is [array]) {
+            $out = @()
+            foreach ($item in $InputObject) {
+                $child = ConvertTo-NoNullsObject -InputObject $item
+                if (-not (Test-IsEmptyNode $child)) {
+                    # unary comma suppresses enumeration/unrolling when adding
+                    $out += ,$child
+                }
+            }
+            return ,$out
+        }
+
+        # Other IEnumerable collections (optional support, still preserves nesting)
+        if ($InputObject -is [System.Collections.IEnumerable] -and
+            $InputObject -isnot [string] -and
+            $InputObject -isnot [System.Collections.IDictionary]) {
+
+            $out = @()
+            foreach ($item in $InputObject) {
+                $child = ConvertTo-NoNullsObject -InputObject $item
+                if (-not (Test-IsEmptyNode $child)) {
+                    $out += ,$child
+                }
+            }
+            return ,$out
+        }
+
+        # Objects / PSCustomObject: prune null-valued properties
+        $acc = [ordered]@{}
+        foreach ($p in $InputObject.PSObject.Properties) {
+            if ($null -eq $p.Value) { continue }
+
+            $child = ConvertTo-NoNullsObject -InputObject $p.Value
+            if (-not (Test-IsEmptyNode $child)) {
+                $acc[$p.Name] = $child
+            }
+        }
+
+        $obj = [pscustomobject]$acc
+
+        # If it became property-less, return an empty custom object
+        # (caller will drop it if needed)
+        return $obj
+    }
+}
+
+
+function Get-ProxyFunction{
+    [cmdletbinding()]
+    param(
+        [string]$Function
+    )
+    process{
+        $f = Get-Command $function
+        $m = [System.Management.Automation.CommandMetaData]::new($f)
+        [System.Management.Automation.ProxyCommand]::Create($m)
+    }
+}
+
+
+
+
+function ConvertTo-UnixPath{
+    param(
+        [parameter(valuefrompipeline)]$Path
+    )
+    begin{
+    }
+    process{
+        $a = convert-path $path
+        $a = $a -replace '\\','/'
+        $a = $a -replace ' ','\ '
+        $a = $a -replace '\(','\('
+        $a = $a -replace '\)','\)'
+        $a
+    }
+    end{
+    }
+}
+
+function ConvertTo-WslPath{
+    param(
+        [parameter(valuefrompipeline)]$Path
+    )
+    begin{
+    }
+    process{
+        $onedrivepath = $env:onedrive -replace '\\','\\'
+        $onedrivepath = $onedrivepath -replace '\\\\$'
+        $onedrivepathregex = [regex]::escape($onedrivepath)
+
+        $a = convert-path $path
+        $a = $a -replace "^$onedrivepathregex\\", '~/onedrive/'
+        $a = convertto-unixpath $a
+        $a = $a -replace '^c:', '/mnt/c'
+        $a
+    }
+    end{
+    }
+}
+
+function Start-Vd{
+    [cmdletbinding()]
+    param(
+        [parameter(valuefrompipeline)]
+        $Path,
+
+        [parameter(position=0)]
+        [validateset('arrow', 'arrows', 'csv', 'dot', 'dta', 'eml', 'fixed', 'frictionless', 'geojson', 'hdf5', 'html', 'jira', 'json', 'jsonl', 'lsv', 'mbtiles', 'md', 'mysql', 'npy', 'ods', 'pandas', 'parquet', 'pbf', 'pcap', 'pdf', 'png', 'postgres', 'pyprof', 'rec', 'sas7bdat', 'sav', 'shp', 'spss', 'sqlite', 'tar', 'tsv', 'ttf', 'usv', 'vcf', 'vd', 'vds', 'xls', 'xlsb', 'xlsx', 'xml', 'xpt', 'yaml', 'zip')]
+        [string]$Type,
+
+        [parameter()]$AdditionalOptions = $null,
+        [parameter()]$Window = 2
+    )
+
+    begin{
+    }
+
+    process{
+#
+#~/.visidatarc
+#
+#globalCommand('gm', 'enable mouse events', 'mm, _ = curses.mousemask(-1); status("mouse "+("ON" if mm else "OFF"))')
+#globalCommand('zm', 'disable mouse events', 'mm, _ = curses.mousemask(0); status("mouse "+("ON" if mm else "OFF"))')
+
+
+        if ($path){
+            $wslpath = $path | convertto-wslpath
+
+            if (-not $type){
+                $type = @('arrow', 'arrows', 'csv', 'dot', 'dta', 'eml', 'fixed', 'frictionless', 'geojson', 'hdf5', 'html', 'jira', 'json', 'jsonl', 'lsv', 'mbtiles', 'md', 'mysql', 'npy', 'ods', 'pandas', 'parquet', 'pbf', 'pcap', 'pdf', 'png', 'postgres', 'pyprof', 'rec', 'sas7bdat', 'sav', 'shp', 'spss', 'sqlite', 'tar', 'tsv', 'ttf', 'usv', 'vcf', 'vd', 'vds', 'xls', 'xlsb', 'xlsx', 'xml', 'xpt', 'yaml', 'zip') | where {$wslpath -match "\.$_$"}
+            }
+
+        }else{
+            $wslpath = $null
+        }
+        if ($type){
+
+            $sb = [scriptblock]::create("wt -w $window -p tumbleweed wsl.exe -d tumbleweed2 --% ~/python-venv/bin/vd $wslpath --filetype $type --clipboard-copy-cmd=clip.exe --quitguard --undo $($additionaloptions -replace "'","\'")")
+            $sb.tostring()
+            $sb.invoke()
+
+        }else{
+            $sb = [scriptblock]::create("wt -w $window -p tumbleweed wsl.exe -d tumbleweed2 ~/python-venv/bin/vd $wslpath --clipboard-copy-cmd=clip.exe --quitguard--header=0 --undo $($additionaloptions -replace "'","\'")'")
+            $sb.tostring()
+            $sb.invoke()
+        }
+    }
+    end{
+    }
+}
+
+function out-vd{
+    [cmdletbinding()]
+    param(
+        [parameter(valuefrompipeline)]$Data,
+
+        [validateset('arrow', 'arrows', 'csv', 'dot', 'dta', 'eml', 'fixed', 'frictionless', 'geojson', 'hdf5', 'html', 'jira', 'json', 'jsonl', 'lsv', 'mbtiles', 'md', 'mysql', 'npy', 'ods', 'pandas', 'parquet', 'pbf', 'pcap', 'pdf', 'png', 'postgres', 'pyprof', 'rec', 'sas7bdat', 'sav', 'shp', 'spss', 'sqlite', 'tar', 'tsv', 'ttf', 'usv', 'vcf', 'vd', 'vds', 'xls', 'xlsb', 'xlsx', 'xml', 'xpt', 'yaml', 'zip')]
+        [parameter(mandatory,position=0)]$Type = 'csv',
+
+        [parameter(position=1)]$Window = 3,
+
+        [switch]$NoConversion,
+        [switch]$AsByteStream
+    )
+
+    begin{
+        $alldata = [system.collections.generic.list[object]]::new()
+        $isXmlType = $false
+    }
+
+    process{
+#        if ($data -is [System.Xml.XmlElement]){
+#            $isXmlType = $true
+#        }
+        $alldata.add($data)
+    }
+    end{
+
+
+        #clean up tmp files from before today
+        if (-not $nopurge){
+            $files = get-childitem "$([System.IO.Path]::GetTempPath())out-vd.*.*" -erroraction silentlycontinue 
+
+            $files | where {$_.lastwritetime.date -lt (get-date).date} | remove-item -confirm:$false
+        }
+
+        $files = get-childitem "$([System.IO.Path]::GetTempPath())out-vd.*.*" -erroraction silentlycontinue | select -expand name | select-string '(?<=^out-vd\.)[^\.]{1,}' | select -expand matches | select -expand value
+
+        if (-not $files){
+            $number = 0
+        }else{
+            $number = $files | measure -max | select -expand maximum
+        }
+
+        $number += 1
+
+        $tmpfile = [System.IO.Path]::GetTempPath() + "out-vd.$number.$type"
+
+        $exported = $false
+        if (-not $asbytestream -and -not $noconversion){
+            switch ($type){
+                
+                'xml' {
+#                    if ($isxmltype){
+                        "<vd-root>$($alldata.outerxml)</vd-root>" | set-content $tmpfile -confirm:$false
+                        $exported = $true
+                        break
+#                    }
+                }
+
+                default {
+                    $alldata | export-csv $tmpfile -confirm:$false
+                    $exported = $true
+                    break
+                }
+            }
+        }
+
+        if (-not $exported){
+            $alldata | set-content $tmpfile -asbytestream:$asbytestream -confirm:$false
+        }
+
+#        $outdata|out-string -width ([int]::maxvalue) | wsl vd --filetype $type
+         start-vd -path $tmpfile -type $type -window $window
+    }
+}
+
+function ConvertFrom-JwtToken {
+    <#
+    .SYNOPSIS
+        Decodes a JWT (JWS) into Header and Payload objects (and signature info).
+    .DESCRIPTION
+        - Splits token into 3 parts: header.payload.signature
+        - Base64URL-decodes header and payload, parses JSON
+        - Returns a rich object with raw and parsed values
+        - NOTE: This does NOT validate the signature.
+    .PARAMETER Token
+        The JWT string.
+    .EXAMPLE
+        $jwt = $env:ACCESS_TOKEN
+        $decoded = Decode-JwtToken -Token $jwt
+        $decoded.Payload
+    #>
+
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory, ValueFromPipeline, ValueFromPipelineByPropertyName)]
+        [string] $Token
+    )
+
+    begin {
+        function ConvertFrom-Base64Url {
+            param([Parameter(Mandatory)][string]$in)
+
+            # Base64Url -> Base64
+            $b64 = $in.Replace('-', '+').Replace('_', '/')
+
+            # Pad to 4-char boundary
+            switch ($b64.Length % 4) {
+                2 { $b64 += '==' }
+                3 { $b64 += '=' }
+                0 { }
+                default { throw "Invalid Base64Url string length." }
+            }
+
+            [System.Convert]::FromBase64String($b64)
+        }
+
+        function ConvertTo-Base64Url {
+            param([Parameter(Mandatory)][byte[]]$Bytes)
+
+            [System.Convert]::ToBase64String($Bytes).TrimEnd('=').Replace('+','-').Replace('/','_')
+        }
+    }
+
+    process {
+        if ([string]::IsNullOrWhiteSpace($Token)) {
+            throw "Token cannot be empty."
+        }
+
+        # Trim common "Bearer " prefix if user passed it in
+        $t = $Token.Trim()
+        if ($t -match '^\s*Bearer\s+') { $t = ($t -replace '^\s*Bearer\s+','').Trim() }
+
+        $parts = $t.Split('.')
+        if ($parts.Count -ne 3) {
+            throw "Invalid JWT format. Expected 3 dot-separated segments (header.payload.signature)."
+        }
+
+        $headerBytes  = ConvertFrom-Base64Url -In $parts[0]
+        $payloadBytes = ConvertFrom-Base64Url -In $parts[1]
+        $sigBytes     = ConvertFrom-Base64Url -In $parts[2]
+
+        $headerJson  = [System.Text.Encoding]::UTF8.GetString($headerBytes)
+        $payloadJson = [System.Text.Encoding]::UTF8.GetString($payloadBytes)
+
+        $headerObj  = $headerJson  | ConvertFrom-Json
+        $payloadObj = $payloadJson | ConvertFrom-Json
+
+        # Helpful time conversion if exp/nbf/iat exist (Unix seconds)
+        $toDateTime = {
+            param($unixSeconds)
+            try {
+                if ($null -ne $unixSeconds -and $unixSeconds -is [ValueType]) {
+                    return [DateTimeOffset]::FromUnixTimeSeconds([int64]$unixSeconds).ToLocalTime()
+                }
+            } catch {}
+            return $null
+        }
+
+        $exp = $null; $nbf = $null; $iat = $null
+#        if ($payloadObj.PSObject.Properties.Name -contains 'exp') { $exp = & $toDateTime $payloadObj.exp }
+#        if ($payloadObj.PSObject.Properties.Name -contains 'nbf') { $nbf = & $toDateTime $payloadObj.nbf }
+#        if ($payloadObj.PSObject.Properties.Name -contains 'iat') { $iat = & $toDateTime $payloadObj.iat }
+        
+        if ($payloadObj.exp -ne $null){ $payloadobj.exp = & $toDateTime $payloadObj.exp}
+        if ($payloadObj.nbf -ne $null){ $payloadobj.nbf = & $toDateTime $payloadObj.nbf}
+        if ($payloadObj.iat -ne $null){ $payloadobj.iat = & $toDateTime $payloadObj.iat}
+        $payloadobj
+
+#        [pscustomobject]@{
+#            Token              = $t
+#            HeaderRaw          = $headerJson
+#            PayloadRaw         = $payloadJson
+#            Header             = $headerObj
+#            Payload            = $payloadObj
+#            SignatureBytes     = $sigBytes
+#            SignatureBase64Url = $parts[2]
+#            SignatureBase64    = [System.Convert]::ToBase64String($sigBytes)
+#
+#            # Common claim helpers (nullable)
+#            Alg                = $headerObj.alg
+#            Kid                = $headerObj.kid
+#            Iss                = $payloadObj.iss
+#            Aud                = $payloadObj.aud
+#            Sub                = $payloadObj.sub
+#            ExpUnix            = $payloadObj.exp
+#            NbfUnix            = $payloadObj.nbf
+#            IatUnix            = $payloadObj.iat
+#            ExpLocal           = $exp
+#            NbfLocal           = $nbf
+#            IatLocal           = $iat
+#        }
+    }
+}
+
+function Select-HashTableKey{
+    [cmdletbinding()]
+    param(
+        [parameter(mandatory,valuefrompipeline)]
+        [hashtable]$HashTable,
+
+        [parameter(mandatory,position=0)]$Key
+    )
+
+    process{
+        $hashtable[$key]
+    }
+}
+
+Update-TypeData -PrependPath "$PSScriptRoot\formatting-files\profile-module.type.ps1xml"
+Update-FormatData -PrependPath "$PSScriptRoot\formatting-files\profile-module.format.ps1xml"
+
+
