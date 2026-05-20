@@ -2705,22 +2705,25 @@ Function ConvertTo-FlatObject {
     [CmdletBinding()]
     Param (
         [Parameter(ValueFromPipeLine)][Object[]]$Objects,
+        [alias('s')]
         [String]$Separator = ".",
 
         [ValidateSet("", 0, 1)]$Base = 0,
 
         [Parameter(Mandatory = $false)]
         [ValidateScript({ $_ -ge 0 })]
-        [int]
-        $Depth = 10,
+        [alias('d')]
+        [int] $Depth = 10,
 
         [parameter()]
         [int]$SortIndexPadding = 6,
 
         [parameter()]
+        [alias('n')]
         [string]$Name = $null,
 
         [parameter()]
+        [alias('p')]
         [string]$PropertyForName = $null,
 
         [Parameter(DontShow)][String[]]$Path,
@@ -2856,6 +2859,10 @@ Function ConvertTo-FlatObject {
             #flatten each object
             foreach ($ItemObject in $InputObjects) {
 
+                if ($itemobject -eq $null){
+                    continue
+                }
+
                 $rootidx++
 
                 #default name
@@ -2866,7 +2873,7 @@ Function ConvertTo-FlatObject {
                 }
 
                 if (-not ([string]::isnullorempty($propertyforname))){
-                    $rootname = $itemobject."$propertyforname" ?? $rootname
+                    $rootname = $itemobject."$propertyforname"?.tostring() ?? $rootname
                 }
 
                 $OutputObject = [ordered]@{}
