@@ -2748,9 +2748,8 @@ Function ConvertTo-FlatObject {
     Process {
         foreach ($O in $Objects) {
             
-
             #special case where flattening something without properties - e.g. an array of numbers
-            if ($path -eq $null -and (${o}?.GetType().isprimitive -or ${o}?.GetType().isenum)) {
+            if ($path -eq $null -and (${o}?.GetType().isprimitive -or ${o}?.GetType().isenum -or $o -is [string])) {
                 $o = @{"__base_value[$($basecount)]" = $o}
                 $basecount++
             }
