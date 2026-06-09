@@ -2749,7 +2749,7 @@ Function ConvertTo-FlatObject {
         foreach ($O in $Objects) {
             
             #special case where flattening something without properties - e.g. an array of numbers
-            if ($path -eq $null -and (${o}?.GetType().isprimitive -or ${o}?.GetType().isenum -or $o -is [string])) {
+            if ($path -eq $null -and (${o}?.GetType().isprimitive -or ${o}?.GetType().isenum -or $o -is [string] -or $o -is [datetime] -or $o -is [datetimeoffset] -or $o -is [timespan] -or $o -is [version])) {
                 $o = @{"__base_value[$($basecount)]" = $o}
                 $basecount++
             }
@@ -2810,10 +2810,10 @@ Function ConvertTo-FlatObject {
             if ($null -eq $Object) {
 
            #don't flatten certain objects where the short version is preferable
-           } elseif ($Object.GetType().isenum) {
-                $Object = $Object.ToString()
-           } elseif ($Object.GetType().Name -in 'String', 'DateTime', 'DateTimeOffset', 'TimeSpan', 'Version') {
-                $Object = $Object.ToString()
+#           } elseif ($Object.GetType().isenum) {
+#                $Object = $Object.ToString()
+#           } elseif ($Object.GetType().Name -in 'String', 'DateTime', 'DateTimeOffset', 'TimeSpan', 'Version') {
+#                $Object = $Object.ToString()
            }
 
            #flatten to the specified depth
@@ -2859,7 +2859,7 @@ Function ConvertTo-FlatObject {
             }
 
             #"keys" may be the name of a property, use psbase to ensure that we're iterating through hashtable keys
-            If ($Iterate.psbase.Keys.Count) {
+            If ($Iterate.psbase.Keys.Count -and -not ($Object.GetType().isenum -or ($Object.GetType().Name -in 'String', 'DateTime', 'DateTimeOffset', 'TimeSpan', 'Version'))) {
 
                 #flatten each iteration
                 foreach ($Key in $Iterate.psbase.Keys) {
@@ -2883,7 +2883,8 @@ Function ConvertTo-FlatObject {
 
                 #set string representation of value
                 }else{
-                    $OutputObject[$Property] = ${Object}?.tostring()
+#                    $OutputObject[$Property] = ${Object}?.tostring()
+                    $OutputObject[$Property] = $object
                 }
             }
         }
