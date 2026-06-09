@@ -13,12 +13,17 @@
             <CustomItem>
               <ExpressionBinding>
               <ScriptBlock><![CDATA[
-                $nameColor = $PSStyle.Foreground.BrightBlack
+                $indexColor = $PSStyle.Foreground.BrightBlack
+                $nameColor = $PSStyle.Foreground.Magenta
                 $keyColor = $PSStyle.Formatting.TableHeader
                 $equalColor = $PSStyle.Foreground.Yellow
                 $valueColor = $PSStyle.Foreground.White
                 $reset = $PSStyle.Reset
-                "{0}{1} {2}{3}{4} {5} {6}{7}{8}" -f $nameColor, $_.name, $keyColor, $_.key, $equalColor, $_.equals, $valuecolor, $_.Value, $reset
+                $name = $_.name?.trim()
+                if ($name.length -gt 0){
+                    $name = "$name "
+                }
+                "{0}{1} {2}{3}{4}{5}{6} {7} {8}{9}{10}" -f $indexColor, $_.rootindex, $nameColor, $name, $keyColor, $_.key, $equalColor, $_.equals, $valuecolor, $_.Value, $reset
               ]]></ScriptBlock>
               </ExpressionBinding>
             </CustomItem>
