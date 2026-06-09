@@ -1753,6 +1753,9 @@ function Invoke-TeeVariable {
         [parameter(position=1, valuefrompipeline)]
         [System.Object]$Value,
 
+        [parameter(position=2)]
+        [string]$Scope = "Global",
+
         [switch]$NoOutput
     )
 
@@ -1765,10 +1768,15 @@ function Invoke-TeeVariable {
         #don't prompt for confirmation - personal preference
         $PSBoundParameters['Confirm'] = $false
 
-        #lift up to calling scope
-        $PSBoundParameters['Scope'] = 2
+        #force
+        $PSBoundParameters['Force'] = $True
 
-        Remove-Variable -name $name -scope $psboundparameters['Scope'] -erroraction silentlycontinue -confirm:$false
+#        #lift up to calling scope
+#        $PSBoundParameters['Scope'] = 2
+
+        $PSBoundParameters['Scope'] = $scope
+
+        Remove-Variable -name $name -scope $PSBoundParameters['Scope'] -erroraction silentlycontinue -confirm:$false -force
 
         $outNoOutput = $null
         if ($PSBoundParameters.TryGetValue('NoOutput', [ref]$outNoOutput)) {
@@ -1784,13 +1792,14 @@ function Invoke-TeeVariable {
     }
 
     process {
+        write-verbose "Type: $($value.gettype().fullname)"
         $steppablePipeline.Process($_)
     }
 
     end {
         $steppablePipeline.End()
         if (-not $nooutput){
-            Get-Variable -name $name -scope $psboundparameters['Scope']| Select-Object -Expand Value
+            Get-Variable -name $name -scope $PSBoundParameters['Scope'] | Select-Object -Expand Value
         }
     }
 
@@ -2704,16 +2713,16 @@ Function ConvertTo-FlatObject {
     #>
     [CmdletBinding()]
     Param (
+        [Parameter(Mandatory = $false, position = 0)]
+        [ValidateScript({ $_ -ge 0 })]
+        [alias('d')]
+        [int] $Depth = 50,
+
         [Parameter(ValueFromPipeLine)][Object[]]$Objects,
         [alias('s')]
         [String]$Separator = ".",
 
         [ValidateSet("", 0, 1)]$Base = 0,
-
-        [Parameter(Mandatory = $false)]
-        [ValidateScript({ $_ -ge 0 })]
-        [alias('d')]
-        [int] $Depth = 10,
 
         [parameter()]
         [int]$SortIndexPadding = 6,
@@ -2725,6 +2734,9 @@ Function ConvertTo-FlatObject {
         [parameter()]
         [alias('p')]
         [string]$PropertyForName = $null,
+
+        [alias('j')]
+        [switch]$FlattenJson,
 
         [Parameter(DontShow)][String[]]$Path,
         [Parameter(DontShow)][System.Collections.IDictionary] $OutputObject
@@ -2750,16 +2762,32 @@ Function ConvertTo-FlatObject {
 
             #jobject doesn't flatten at all. first encountered in an azure logic app object
             elseif($o -is [Newtonsoft.Json.Linq.JObject]){
-                try{
-                $o = $o.tostring() | convertfrom-json -depth $depth
-                }catch{
-                    write-information "error converting JObject from json. Retrying AsHashTable.."
-                    $o = $o.tostring() | convertfrom-json -depth $depth -ashashtable
-                }
+#                try{
+#                    #don't flatten further
+#                    if ($flattenJObjectString){
+#                        $o = $o.tostring() | convertfrom-json -depth $depth
+#                    }else{
+#                        $o = $o.tostring()
+#                    }
+#                }catch{
+#                    write-information "error converting JObject from json. Retrying AsHashTable.."
+#                    $o = $o.tostring() | convertfrom-json -depth $depth -ashashtable
+#                }
+                $o = $o.tostring()
             }
             #jvalue doesn't flatten at all. first encountered in an azure logic app object
             elseif($o -is [Newtonsoft.Json.Linq.JValue]){
                 $o = $o.value
+            }
+
+            if ($flattenjson -and $o -is [string] -and ($o | test-json -erroraction silentlycontinue)){
+
+                try{
+                    $o = $o | convertfrom-json -depth $depth
+                }catch{
+                    write-information "error converting from json. Retrying AsHashTable.."
+                    $o = $o | convertfrom-json -depth $depth -ashashtable
+                }
             }
 
             #skip if null
@@ -2799,7 +2827,7 @@ Function ConvertTo-FlatObject {
 
                 #take as is for dictionary
                 }elseif ($object -is [Newtonsoft.Json.Linq.JObject]){
-                    $Iterate = $Object
+                    $Iterate = $Object.tostring()
 
                 #modify name for array depth and assign the value
                 }elseif ($Object -is [Array] -or $Object -is [System.Collections.IEnumerable]) {
@@ -2819,6 +2847,16 @@ Function ConvertTo-FlatObject {
                         }
                     }
                 }
+
+                if ($flattenjson -and $iterate -is [string] -and ($iterate | test-json -erroraction silentlycontinue)){
+
+                    try{
+                        $iterate = $iterate | convertfrom-json -depth $depth
+                    }catch{
+                        write-information "error converting from json. Retrying AsHashTable.."
+                        $iterate = $iterate | convertfrom-json -depth $depth -ashashtable
+                    }
+                }
             }
 
             #"keys" may be the name of a property, use psbase to ensure that we're iterating through hashtable keys
@@ -2826,7 +2864,7 @@ Function ConvertTo-FlatObject {
 
                 #flatten each iteration
                 foreach ($Key in $Iterate.psbase.Keys) {
-                    ConvertTo-FlatObject -Objects @(, $Iterate[$Key]) -Separator $Separator -Base $Base -Depth $Depth -Path ($Path + $Key) -OutputObject $OutputObject -sortIndexPadding $sortindexpadding
+                    ConvertTo-FlatObject -Objects @(, $Iterate[$Key]) -Separator $Separator -Base $Base -Depth $Depth -Path ($Path + $Key) -OutputObject $OutputObject -sortIndexPadding $sortindexpadding -flattenjson:$flattenjson
                 }
 
             #already flat, set the output
@@ -2868,16 +2906,12 @@ Function ConvertTo-FlatObject {
                 #default name
                 $rootname = $name
 
-                if ([string]::isnullorempty($rootname)){
-                    $rootname = $rootidx.tostring()
-                }
-
                 if (-not ([string]::isnullorempty($propertyforname))){
-                    $rootname = $itemobject."$propertyforname"?.tostring() ?? $rootname
+                    $rootname = $itemobject."$propertyforname"?.tostring()
                 }
 
                 $OutputObject = [ordered]@{}
-                ConvertTo-FlatObject -Objects @(, $ItemObject) -Separator $Separator -Base $Base -Depth $Depth -Path $Path -OutputObject $OutputObject -sortIndexPadding $sortindexpadding
+                ConvertTo-FlatObject -Objects @(, $ItemObject) -Separator $Separator -Base $Base -Depth $Depth -Path $Path -OutputObject $OutputObject -sortIndexPadding $sortindexpadding -flattenjson:$flattenjson
 
                 #error will occur below if the flattening did nothing
                 $props = ([pscustomobject]$outputobject).psobject.properties
@@ -2901,10 +2935,12 @@ Function ConvertTo-FlatObject {
                 foreach($prop in $sortedprops){
                     [pscustomobject]@{
                         pstypename = 'NZ.FlatObject.Entry'
+                        rootindex = $rootidx.tostring()
                         name = $rootname.trim()
                         key = $prop.Name
                         equals = "="
                         value = $prop.Value
+                        line = "$($prop.name) = $($prop.Value)"
                     }
                 }
 
@@ -3327,6 +3363,27 @@ function Select-HashTableKey{
 
     process{
         $hashtable[$key]
+    }
+}
+
+function ConvertTo-HashTableFromObject{
+    [cmdletbinding()]
+    param(
+        [parameter(mandatory,valuefrompipeline)]
+        [object]$Object,
+
+        [parameter(mandatory,position=0)]
+        [string]$PropertyNameKey
+    )
+
+    begin{
+        $hashtable = [ordered]@{}
+    }
+    process{
+        $hashtable.add($object."$propertynamekey", $object)
+    }
+    end{
+        $hashtable
     }
 }
 
