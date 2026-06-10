@@ -2948,7 +2948,7 @@ Function ConvertTo-FlatObject {
             #flatten each object
             foreach ($ItemObject in $InputObjects) {
                 $oidx++
-                write-progress -parentid $parentprogressid -id $thisprogressid -activity "flattening top level..." -status "$(${o}?.tostring() ?? "???")" -percent ($oidx / $ocount * 100)
+                write-progress -parentid $parentprogressid -id $thisprogressid -activity "flattening top level..." -status "$(${inputobject}?.tostring() ?? "???")" -percent ($oidx / $ocount * 100)
 
 
                 if ($itemobject -eq $null){
