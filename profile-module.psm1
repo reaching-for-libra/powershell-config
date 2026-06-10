@@ -2739,17 +2739,57 @@ Function ConvertTo-FlatObject {
         [switch]$FlattenJson,
 
         [Parameter(DontShow)][String[]]$Path,
-        [Parameter(DontShow)][System.Collections.IDictionary] $OutputObject
+        [Parameter(DontShow)][System.Collections.IDictionary] $OutputObject,
+        [Parameter(DontShow)][int] $ParentProgressId = 0
     )
     Begin {
         $InputObjects = [System.Collections.Generic.List[Object]]::new()
             $basecount = 0
+
+        function flattenokay {
+            param(
+                $o
+            )
+            if ($o -eq $null){
+                $false
+                return
+            }
+
+            $otype = $o.gettype()
+
+            if ($otype.isprimitive -or $otype.isenum){
+                $false
+                return
+            }
+
+            $types = @(
+                [string],
+                [datetime],
+                [datetimeoffset],
+                [timespan],
+                [version],
+                [type],
+                [delegate],
+                [scriptblock],
+                [system.text.stringbuilder]
+            )
+
+            foreach($type in $types){
+                if ($o -is $type){
+                    $false
+                    return
+                }
+            }
+
+            $true
+        }
     }
     Process {
+
         foreach ($O in $Objects) {
             
             #special case where flattening something without properties - e.g. an array of numbers
-            if ($path -eq $null -and (${o}?.GetType().isprimitive -or ${o}?.GetType().isenum -or $o -is [string] -or $o -is [datetime] -or $o -is [datetimeoffset] -or $o -is [timespan] -or $o -is [version])) {
+            if ($path -eq $null -and -not (flattenokay $o)) {
                 $o = @{"__base_value[$($basecount)]" = $o}
                 $basecount++
             }
@@ -2859,12 +2899,19 @@ Function ConvertTo-FlatObject {
             }
 
             #"keys" may be the name of a property, use psbase to ensure that we're iterating through hashtable keys
-            If ($Iterate.psbase.Keys.Count -and -not ($Object.GetType().isenum -or ($Object.GetType().Name -in 'String', 'DateTime', 'DateTimeOffset', 'TimeSpan', 'Version'))) {
+            #don't flatten certain types
+            If ($Iterate.psbase.Keys.Count -and (flattenokay $object)) {
+
+                $oCount = $inputobjects.count
+                $oIdx = 0
+                $thisProgressid = $parentprogressid + 1
 
                 #flatten each iteration
                 foreach ($Key in $Iterate.psbase.Keys) {
-                    ConvertTo-FlatObject -Objects @(, $Iterate[$Key]) -Separator $Separator -Base $Base -Depth $Depth -Path ($Path + $Key) -OutputObject $OutputObject -sortIndexPadding $sortindexpadding -flattenjson:$flattenjson
+                    write-progress -parentid $parentprogressid -id $thisprogressid -activity "flattening..." -status $key -percent ($oidx / $ocount * 100)
+                    ConvertTo-FlatObject -Objects @(, $Iterate[$Key]) -Separator $Separator -Base $Base -Depth $Depth -Path ($Path + $Key) -OutputObject $OutputObject -sortIndexPadding $sortindexpadding -flattenjson:$flattenjson -parentprogressid $thisprogressid
                 }
+                write-progress -parentid $parentprogressid -id $thisprogressid -activity "flattening..." -complete
 
             #already flat, set the output
             } else {
@@ -2894,8 +2941,15 @@ Function ConvertTo-FlatObject {
 
             $rootidx = -1
 
+            $oCount = $inputobjects.count
+            $oIdx = 0
+            $thisProgressid = $parentprogressid + 1
+
             #flatten each object
             foreach ($ItemObject in $InputObjects) {
+                $oidx++
+                write-progress -parentid $parentprogressid -id $thisprogressid -activity "flattening top level..." -status "$(${o}?.tostring() ?? "???")" -percent ($oidx / $ocount * 100)
+
 
                 if ($itemobject -eq $null){
                     continue
@@ -2911,7 +2965,7 @@ Function ConvertTo-FlatObject {
                 }
 
                 $OutputObject = [ordered]@{}
-                ConvertTo-FlatObject -Objects @(, $ItemObject) -Separator $Separator -Base $Base -Depth $Depth -Path $Path -OutputObject $OutputObject -sortIndexPadding $sortindexpadding -flattenjson:$flattenjson
+                ConvertTo-FlatObject -Objects @(, $ItemObject) -Separator $Separator -Base $Base -Depth $Depth -Path $Path -OutputObject $OutputObject -sortIndexPadding $sortindexpadding -flattenjson:$flattenjson -parentprogressid $thisprogressid
 
                 #error will occur below if the flattening did nothing
                 $props = ([pscustomobject]$outputobject).psobject.properties
@@ -2945,6 +2999,7 @@ Function ConvertTo-FlatObject {
                 }
 
             }
+            write-progress -parentid $parentprogressid -id $thisprogressid -activity "flattening..." -complete
         }
     }
 }
