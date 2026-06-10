@@ -2738,6 +2738,8 @@ Function ConvertTo-FlatObject {
         [alias('j')]
         [switch]$FlattenJson,
 
+        [switch]$ShowChildProgress,
+
         [Parameter(DontShow)][String[]]$Path,
         [Parameter(DontShow)][System.Collections.IDictionary] $OutputObject,
         [Parameter(DontShow)][int] $ParentProgressId = 0
@@ -2908,10 +2910,14 @@ Function ConvertTo-FlatObject {
 
                 #flatten each iteration
                 foreach ($Key in $Iterate.psbase.Keys) {
-                    write-progress -parentid $parentprogressid -id $thisprogressid -activity "flattening..." -status $key -percent ($oidx / $ocount * 100)
-                    ConvertTo-FlatObject -Objects @(, $Iterate[$Key]) -Separator $Separator -Base $Base -Depth $Depth -Path ($Path + $Key) -OutputObject $OutputObject -sortIndexPadding $sortindexpadding -flattenjson:$flattenjson -parentprogressid $thisprogressid
+                    if ($showchildprogress){
+                        write-progress -parentid $parentprogressid -id $thisprogressid -activity "flattening..." -status $key -percent ($oidx / $ocount * 100)
+                    }
+                    ConvertTo-FlatObject -Objects @(, $Iterate[$Key]) -Separator $Separator -Base $Base -Depth $Depth -Path ($Path + $Key) -OutputObject $OutputObject -sortIndexPadding $sortindexpadding -flattenjson:$flattenjson -parentprogressid $thisprogressid -showchildprogress:$showchildprogress
                 }
-                write-progress -parentid $parentprogressid -id $thisprogressid -activity "flattening..." -complete
+                if ($showchildprogress){
+                    write-progress -parentid $parentprogressid -id $thisprogressid -activity "flattening..." -complete
+                }
 
             #already flat, set the output
             } else {
@@ -2948,7 +2954,7 @@ Function ConvertTo-FlatObject {
             #flatten each object
             foreach ($ItemObject in $InputObjects) {
                 $oidx++
-                write-progress -parentid $parentprogressid -id $thisprogressid -activity "flattening top level..." -status "$(${inputobject}?.tostring() ?? "???")" -percent ($oidx / $ocount * 100)
+                write-progress -parentid $parentprogressid -id $thisprogressid -activity "flattening top level..." -status "$oidx of $ocount" -percent ($oidx / $ocount * 100)
 
 
                 if ($itemobject -eq $null){
@@ -2965,7 +2971,7 @@ Function ConvertTo-FlatObject {
                 }
 
                 $OutputObject = [ordered]@{}
-                ConvertTo-FlatObject -Objects @(, $ItemObject) -Separator $Separator -Base $Base -Depth $Depth -Path $Path -OutputObject $OutputObject -sortIndexPadding $sortindexpadding -flattenjson:$flattenjson -parentprogressid $thisprogressid
+                ConvertTo-FlatObject -Objects @(, $ItemObject) -Separator $Separator -Base $Base -Depth $Depth -Path $Path -OutputObject $OutputObject -sortIndexPadding $sortindexpadding -flattenjson:$flattenjson -parentprogressid $thisprogressid -showchildprogress:$showchildprogress
 
                 #error will occur below if the flattening did nothing
                 $props = ([pscustomobject]$outputobject).psobject.properties
